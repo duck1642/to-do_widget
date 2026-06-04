@@ -3,6 +3,19 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { markdownToTasks, tasksToMarkdown } from "../utils/parser.js";
+  import { 
+    Plus, 
+    Undo2, 
+    Redo2, 
+    RotateCw, 
+    Trash2, 
+    ChevronUp, 
+    ChevronDown, 
+    Settings, 
+    Layers, 
+    X,
+    Check
+  } from "@lucide/svelte";
 
   // State variables (Svelte 5 Runes)
   let filePath = $state("");
@@ -384,14 +397,15 @@
       TO-DO {statusMessage ? `[${statusMessage}]` : ""}
     </span>
     <div class="header-controls">
-      <button class="ascii-btn" onclick={() => showModeMenu = !showModeMenu} title="Window Layer Mode">
-        [M: {getModeLabel(layerMode)}]
+      <button class="icon-btn-header" onclick={() => showModeMenu = !showModeMenu} title="Window Layer Mode">
+        <Layers size={13} />
+        <span class="btn-text">{getModeLabel(layerMode)}</span>
       </button>
-      <button class="ascii-btn" onclick={() => editingPath = !editingPath} title="Settings">
-        [S]
+      <button class="icon-btn-header" onclick={() => editingPath = !editingPath} title="Settings">
+        <Settings size={13} />
       </button>
-      <button class="ascii-btn close" onclick={closeApp} title="Close">
-        [X]
+      <button class="icon-btn-header close" onclick={closeApp} title="Close">
+        <X size={13} />
       </button>
     </div>
   </header>
@@ -423,8 +437,8 @@
           placeholder="C:\Users\...\todo.md"
         />
         <div class="settings-actions">
-          <button class="action-btn" onclick={savePath}>[Save]</button>
-          <button class="action-btn" onclick={cancelPathEdit}>[Cancel]</button>
+          <button class="action-btn" onclick={savePath}>Save</button>
+          <button class="action-btn" onclick={cancelPathEdit}>Cancel</button>
         </div>
       </div>
     {:else}
@@ -435,12 +449,16 @@
               class="task-row" 
               style="padding-left: {task.indent * 16}px"
             >
-              <input 
-                type="checkbox" 
-                class="task-check" 
-                checked={task.checked} 
-                onchange={() => toggleTask(task.id)}
-              />
+              <button 
+                type="button"
+                class="custom-check-btn {task.checked ? 'checked' : ''}" 
+                onclick={() => toggleTask(task.id)}
+                title={task.checked ? "Mark active" : "Mark completed"}
+              >
+                {#if task.checked}
+                  <Check size={10} strokeWidth={4} />
+                {/if}
+              </button>
               <input 
                 type="text" 
                 class="task-text {task.checked ? 'completed' : ''}" 
@@ -465,9 +483,15 @@
                 placeholder="New Task..."
               />
               <div class="row-actions">
-                <button class="row-btn" onclick={() => moveTaskUp(index)} title="Move Up">[^]</button>
-                <button class="row-btn" onclick={() => moveTaskDown(index)} title="Move Down">[v]</button>
-                <button class="row-btn del" onclick={() => deleteTask(index)} title="Delete">[x]</button>
+                <button class="row-btn" onclick={() => moveTaskUp(index)} title="Move Up">
+                  <ChevronUp size={13} />
+                </button>
+                <button class="row-btn" onclick={() => moveTaskDown(index)} title="Move Down">
+                  <ChevronDown size={13} />
+                </button>
+                <button class="row-btn del" onclick={() => deleteTask(index)} title="Delete">
+                  <Trash2 size={13} />
+                </button>
               </div>
             </div>
           {:else}
@@ -476,7 +500,9 @@
               <div class="raw-row">
                 <span class="raw-text">{task.raw}</span>
                 <div class="row-actions">
-                  <button class="row-btn del" onclick={() => deleteTask(index)} title="Delete">[x]</button>
+                  <button class="row-btn del" onclick={() => deleteTask(index)} title="Delete">
+                    <Trash2 size={13} />
+                  </button>
                 </div>
               </div>
             {/if}
@@ -494,12 +520,22 @@
 
   <!-- Bottom Action Bar -->
   <footer class="bottom-bar">
-    <button class="action-btn" onclick={() => addTask(-1, 0)}>[+] Add</button>
+    <button class="action-btn" onclick={() => addTask(-1, 0)} title="Add Task">
+      <Plus size={13} />
+    </button>
     <div class="footer-right">
-      <button class="action-btn" onclick={undo} title="Undo last deletion">[Undo]</button>
-      <button class="action-btn" onclick={redo} disabled={redoStack.length === 0} title="Redo last undone deletion">[Redo]</button>
-      <button class="action-btn" onclick={loadFile}>[Reload]</button>
-      <button class="action-btn" onclick={clearCompleted}>[Clear]</button>
+      <button class="action-btn" onclick={undo} title="Undo last action">
+        <Undo2 size={13} />
+      </button>
+      <button class="action-btn" onclick={redo} disabled={redoStack.length === 0} title="Redo last undone action">
+        <Redo2 size={13} />
+      </button>
+      <button class="action-btn" onclick={loadFile} title="Reload file">
+        <RotateCw size={13} />
+      </button>
+      <button class="action-btn" onclick={clearCompleted} title="Clear completed tasks">
+        <Trash2 size={13} />
+      </button>
     </div>
   </footer>
 </main>
@@ -613,6 +649,8 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    width: max-content;
+    min-width: 100%;
   }
 
   .task-row {
@@ -620,20 +658,53 @@
     align-items: center;
     padding: 2px 4px;
     border-radius: 2px;
-    min-width: 320px;
+    min-width: 100%;
+    width: max-content;
     box-sizing: border-box;
   }
 
-  .task-row:hover {
-    background-color: var(--bg-header);
-  }
 
-  .task-check {
+
+  .custom-check-btn {
     width: 14px;
     height: 14px;
     margin-right: 8px;
     cursor: pointer;
-    accent-color: var(--accent);
+    background: var(--bg-dark);
+    border: 1.5px solid #444444;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    color: #ffffff;
+    flex-shrink: 0;
+  }
+
+  .custom-check-btn:hover {
+    border-color: #666666;
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .custom-check-btn:active {
+    border-color: #888888;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .custom-check-btn.checked {
+    border-color: rgba(255, 255, 255, 0.85);
+    background: #2e2e2e;
+    color: #ffffff;
+  }
+
+  .custom-check-btn.checked:hover {
+    border-color: #ffffff;
+    background: #383838;
+  }
+
+  .custom-check-btn.checked:active {
+    border-color: rgba(255, 255, 255, 0.7);
+    background: #252525;
   }
 
   .task-text {
@@ -644,6 +715,7 @@
     font-size: 13px;
     outline: none;
     padding: 2px 0;
+    min-width: 150px; /* Prevent text input from collapsing on deep indentation */
   }
 
   .task-text.completed {
@@ -661,7 +733,8 @@
     background-color: rgba(255, 255, 255, 0.02);
     border-left: 2px solid var(--text-muted);
     margin: 4px 0;
-    min-width: 320px;
+    min-width: 100%;
+    width: max-content;
     box-sizing: border-box;
   }
 
@@ -680,64 +753,89 @@
 
   /* Controls visibility on hover */
   .row-actions {
-    display: none;
+    display: flex;
     gap: 2px;
+    opacity: 0;
+    pointer-events: none;
   }
 
   .task-row:hover .row-actions,
   .raw-row:hover .row-actions {
-    display: flex;
+    opacity: 1;
+    pointer-events: auto;
   }
 
   /* Buttons */
-  .ascii-btn {
+  .icon-btn-header {
     background: transparent;
     border: none;
     color: var(--text-muted);
-    font-family: monospace;
-    font-size: 12px;
     cursor: pointer;
-    padding: 2px 4px;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    border-radius: 4px;
   }
 
-  .ascii-btn:hover {
+  .icon-btn-header:hover {
     color: var(--text-color);
+    background-color: var(--border-color);
   }
 
-  .ascii-btn.close:hover {
+  .icon-btn-header.close:hover {
     color: #ff5555;
+    background-color: rgba(255, 85, 85, 0.1);
+  }
+
+  .btn-text {
+    font-size: 9px;
+    font-weight: bold;
+    text-transform: uppercase;
   }
 
   .row-btn {
     background: transparent;
     border: none;
     color: var(--text-muted);
-    font-family: monospace;
-    font-size: 11px;
     cursor: pointer;
-    padding: 0 4px;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
   }
 
   .row-btn:hover {
     color: var(--text-color);
+    background-color: var(--border-color);
   }
 
   .row-btn.del:hover {
     color: #ff5555;
+    background-color: rgba(255, 85, 85, 0.1);
   }
 
   .action-btn {
     background: transparent;
     border: 1px solid var(--border-color);
     color: var(--text-color);
-    padding: 4px 8px;
-    font-size: 12px;
+    padding: 5px;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
   }
 
-  .action-btn:hover {
+  .action-btn:hover:not(:disabled) {
     background-color: var(--bg-header);
     border-color: var(--text-muted);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
   }
 
   /* Bottom status bar */
