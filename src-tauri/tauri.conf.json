@@ -18,7 +18,9 @@
         "height": 550,
         "transparent": false,
         "decorations": false,
-        "alwaysOnBottom": false
+        "alwaysOnBottom": false,
+        "minWidth": 260,
+        "minHeight": 300
       }
     ],
     "security": {

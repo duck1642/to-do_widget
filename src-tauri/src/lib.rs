@@ -47,6 +47,46 @@ fn set_always_on_bottom(window: tauri::Window, on_bottom: bool) -> Result<(), St
     window.set_always_on_bottom(on_bottom).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn log_deleted_task(path: String, entry_json: String) -> Result<(), String> {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|e| e.to_string())?;
+        
+    writeln!(file, "{}", entry_json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn pop_deleted_task(path: String) -> Result<String, String> {
+    if !std::path::Path::new(&path).exists() {
+        return Err("No history".to_string());
+    }
+    
+    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let mut lines: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();
+    
+    if lines.is_empty() {
+        return Err("No history".to_string());
+    }
+    
+    let last_line = lines.pop().unwrap().to_string();
+    
+    let new_content = if lines.is_empty() {
+        "".to_string()
+    } else {
+        lines.join("\n") + "\n"
+    };
+    
+    fs::write(&path, new_content).map_err(|e| e.to_string())?;
+    
+    Ok(last_line)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -57,7 +97,9 @@ pub fn run() {
             get_default_path,
             get_file_modified_time,
             set_always_on_top,
-            set_always_on_bottom
+            set_always_on_bottom,
+            log_deleted_task,
+            pop_deleted_task
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

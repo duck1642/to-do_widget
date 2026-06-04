@@ -14,6 +14,8 @@
   let statusMessage = $state("");
   let layerMode = $state("normal");
   let showModeMenu = $state(false);
+  let logPath = $state("");
+  let redoStack = $state([]);
 
   // Keep a reference to inputs to set focus programmatically
   let inputElements = {};
@@ -35,6 +37,8 @@
         filePath = await invoke("get_default_path");
         pathInputVal = filePath;
       }
+      
+      logPath = filePath.replace(/\.md$/, ".jsonl");
       
       const content = await invoke("read_todo", { path: filePath });
       tasks = markdownToTasks(content);
@@ -121,9 +125,26 @@
     saveFile();
   }
 
-  function deleteTask(index) {
-    tasks.splice(index, 1);
-    saveFile();
+  async function deleteTask(index) {
+    const taskToDelete = tasks[index];
+    if (taskToDelete) {
+      // Clear redo stack on manual delete action
+      redoStack = [];
+      
+      const entry = {
+        index: index,
+        task: taskToDelete
+      };
+      
+      try {
+        await invoke("log_deleted_task", { path: logPath, entryJson: JSON.stringify(entry) });
+      } catch (err) {
+        showStatus("Err log: " + err);
+      }
+      
+      tasks.splice(index, 1);
+      saveFile();
+    }
   }
 
   function indentTask(id) {
@@ -168,9 +189,65 @@
     }
   }
 
-  function clearCompleted() {
+  async function clearCompleted() {
+    redoStack = [];
+    const completedTasks = tasks
+      .map((t, i) => ({ task: t, index: i }))
+      .filter(x => x.task.isTask && x.task.checked);
+    
+    // Log deleted completed tasks in reverse order to undo sequentially
+    for (let i = completedTasks.length - 1; i >= 0; i--) {
+      const entry = completedTasks[i];
+      try {
+        await invoke("log_deleted_task", { path: logPath, entryJson: JSON.stringify(entry) });
+      } catch (err) {
+        showStatus("Err log: " + err);
+      }
+    }
+    
     tasks = tasks.filter(t => !t.isTask || !t.checked);
     saveFile();
+  }
+
+  async function undo() {
+    try {
+      const poppedLine = await invoke("pop_deleted_task", { path: logPath });
+      const entry = JSON.parse(poppedLine);
+      
+      // Push to redo stack
+      redoStack.push(entry);
+      
+      // Restore task at its original index
+      tasks.splice(entry.index, 0, entry.task);
+      saveFile();
+      showStatus("Undone");
+    } catch (err) {
+      if (err.includes("No history")) {
+        showStatus("No Undo");
+      } else {
+        showStatus("Err Undo: " + err);
+      }
+    }
+  }
+
+  async function redo() {
+    if (redoStack.length === 0) return;
+    
+    const entry = redoStack.pop();
+    const targetTask = tasks[entry.index];
+    
+    // Verify it's the correct task we restored
+    if (targetTask && targetTask.id === entry.task.id) {
+      try {
+        await invoke("log_deleted_task", { path: logPath, entryJson: JSON.stringify(entry) });
+      } catch (err) {
+        showStatus("Err log: " + err);
+      }
+      
+      tasks.splice(entry.index, 1);
+      saveFile();
+      showStatus("Redone");
+    }
   }
 
   // Keyboard navigation & editing handlers
@@ -256,17 +333,11 @@
     return "Norm";
   }
 
-  function startDrag(event) {
-    if (event.target.tagName !== "BUTTON") {
-      getCurrentWindow().startDragging();
-    }
-  }
 </script>
 
 <main class="app-container">
   <!-- Title / Drag Header -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <header class="drag-header" onmousedown={startDrag} data-tauri-drag-region>
+  <header class="drag-header" data-tauri-drag-region>
     <span class="title-text" data-tauri-drag-region>
       TO-DO {statusMessage ? `[${statusMessage}]` : ""}
     </span>
@@ -375,6 +446,8 @@
   <footer class="bottom-bar">
     <button class="action-btn" onclick={() => addTask(-1, 0)}>[+] Add</button>
     <div class="footer-right">
+      <button class="action-btn" onclick={undo} title="Undo last deletion">[Undo]</button>
+      <button class="action-btn" onclick={redo} disabled={redoStack.length === 0} title="Redo last undone deletion">[Redo]</button>
       <button class="action-btn" onclick={loadFile}>[Reload]</button>
       <button class="action-btn" onclick={clearCompleted}>[Clear]</button>
     </div>
@@ -393,23 +466,33 @@
   }
 
   /* Reset and base styles */
-  :global(body) {
+  :global(html), :global(body) {
     margin: 0;
     padding: 0;
-    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-    background-color: var(--bg-panel) !important;
-    color: var(--text-color);
+    width: 100%;
+    height: 100%;
     overflow: hidden;
+    background-color: var(--bg-panel) !important;
+  }
+
+  :global(body) {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: var(--text-color);
     user-select: none;
+    position: relative;
   }
 
   .app-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     display: flex;
     flex-direction: column;
-    width: 100vw;
-    height: 100vh;
     background-color: var(--bg-panel);
     border: 1px solid var(--border-color);
+    border-radius: 8px;
     box-sizing: border-box;
     overflow: hidden;
   }
@@ -424,6 +507,7 @@
     border-bottom: 1px solid var(--border-color);
     padding: 0 8px;
     cursor: move;
+    flex: none;
   }
 
   .title-text {
@@ -441,7 +525,7 @@
   /* Content body */
   .content-area {
     flex: 1;
-    overflow-y: auto;
+    overflow: auto;
     padding: 8px;
     display: flex;
     flex-direction: column;
@@ -486,6 +570,8 @@
     align-items: center;
     padding: 2px 4px;
     border-radius: 2px;
+    min-width: 320px;
+    box-sizing: border-box;
   }
 
   .task-row:hover {
@@ -525,6 +611,8 @@
     background-color: rgba(255, 255, 255, 0.02);
     border-left: 2px solid var(--text-muted);
     margin: 4px 0;
+    min-width: 320px;
+    box-sizing: border-box;
   }
 
   .raw-text {
@@ -611,6 +699,7 @@
     background-color: var(--bg-header);
     border-top: 1px solid var(--border-color);
     padding: 0 8px;
+    flex: none;
   }
 
   .footer-right {
@@ -652,5 +741,36 @@
   .menu-item.active {
     color: var(--accent);
     font-weight: bold;
+  }
+
+  /* Custom dark scrollbar styling for WebKit (Edge WebView2) */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #333333;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #444444;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Hide focus outlines globally */
+  * {
+    outline: none;
+  }
+  *:focus {
+    outline: none;
   }
 </style>
