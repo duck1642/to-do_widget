@@ -30,6 +30,7 @@
   let logPath = $state("");
   let redoStack = $state([]);
   let originalTexts = {};
+  let dragEnabled = $state(true);
 
   // Keep a reference to inputs to set focus programmatically
   let inputElements = {};
@@ -87,6 +88,12 @@
     const savedMode = localStorage.getItem("todo-layer-mode");
     if (savedMode) {
       changeLayerMode(savedMode);
+    }
+
+    // Load drag enabled setting
+    const savedDrag = localStorage.getItem("todo-drag-enabled");
+    if (savedDrag !== null) {
+      dragEnabled = savedDrag === "true";
     }
     
     const interval = setInterval(async () => {
@@ -388,27 +395,53 @@
     return "Norm";
   }
 
+  function toggleDrag() {
+    dragEnabled = !dragEnabled;
+    localStorage.setItem("todo-drag-enabled", dragEnabled.toString());
+    showStatus(dragEnabled ? "Drag On" : "Drag Off");
+  }
+
 </script>
 
 <main class="app-container">
   <!-- Title / Drag Header -->
-  <header class="drag-header" data-tauri-drag-region>
-    <span class="title-text" data-tauri-drag-region>
-      TO-DO {statusMessage ? `[${statusMessage}]` : ""}
-    </span>
-    <div class="header-controls">
-      <button class="icon-btn-header" onclick={() => showModeMenu = !showModeMenu} title="Window Layer Mode">
-        <Layers size={13} />
-        <span class="btn-text">{getModeLabel(layerMode)}</span>
-      </button>
-      <button class="icon-btn-header" onclick={() => editingPath = !editingPath} title="Settings">
-        <Settings size={13} />
-      </button>
-      <button class="icon-btn-header close" onclick={closeApp} title="Close">
-        <X size={13} />
-      </button>
-    </div>
-  </header>
+  {#if dragEnabled}
+    <header class="drag-header draggable" data-tauri-drag-region>
+      <span class="title-text" data-tauri-drag-region>
+        TO-DO {statusMessage ? `[${statusMessage}]` : ""}
+      </span>
+      <div class="header-controls">
+        <button class="icon-btn-header" onclick={() => showModeMenu = !showModeMenu} title="Window Layer Mode">
+          <Layers size={13} />
+          <span class="btn-text">{getModeLabel(layerMode)}</span>
+        </button>
+        <button class="icon-btn-header" onclick={() => editingPath = !editingPath} title="Settings">
+          <Settings size={13} />
+        </button>
+        <button class="icon-btn-header close" onclick={closeApp} title="Close">
+          <X size={13} />
+        </button>
+      </div>
+    </header>
+  {:else}
+    <header class="drag-header">
+      <span class="title-text">
+        TO-DO {statusMessage ? `[${statusMessage}]` : ""}
+      </span>
+      <div class="header-controls">
+        <button class="icon-btn-header" onclick={() => showModeMenu = !showModeMenu} title="Window Layer Mode">
+          <Layers size={13} />
+          <span class="btn-text">{getModeLabel(layerMode)}</span>
+        </button>
+        <button class="icon-btn-header" onclick={() => editingPath = !editingPath} title="Settings">
+          <Settings size={13} />
+        </button>
+        <button class="icon-btn-header close" onclick={closeApp} title="Close">
+          <X size={13} />
+        </button>
+      </div>
+    </header>
+  {/if}
 
   <!-- Content Workspace -->
   <div class="content-area" style="position: relative;">
@@ -436,6 +469,25 @@
           bind:value={pathInputVal} 
           placeholder="C:\Users\...\todo.md"
         />
+        
+        <!-- Window Dragging Toggle -->
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="settings-toggle-row" style="display: flex; align-items: center; gap: 6px; cursor: pointer;" onclick={toggleDrag}>
+          <button 
+            type="button"
+            class="custom-check-btn {dragEnabled ? 'checked' : ''}" 
+            title="Toggle header dragging"
+          >
+            {#if dragEnabled}
+              <Check size={10} strokeWidth={4} />
+            {/if}
+          </button>
+          <span class="settings-label" style="user-select: none; cursor: pointer;">
+            Window Dragging
+          </span>
+        </div>
+
         <div class="settings-actions">
           <button class="action-btn" onclick={savePath}>Save</button>
           <button class="action-btn" onclick={cancelPathEdit}>Cancel</button>
@@ -592,8 +644,12 @@
     background-color: var(--bg-header);
     border-bottom: 1px solid var(--border-color);
     padding: 0 8px;
-    cursor: move;
+    cursor: default;
     flex: none;
+  }
+
+  .drag-header.draggable {
+    cursor: move;
   }
 
   .title-text {
