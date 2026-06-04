@@ -16,6 +16,7 @@
   let showModeMenu = $state(false);
   let logPath = $state("");
   let redoStack = $state([]);
+  let originalTexts = {};
 
   // Keep a reference to inputs to set focus programmatically
   let inputElements = {};
@@ -92,10 +93,22 @@
     return () => clearInterval(interval);
   });
 
+  // Action logging helper
+  async function logAction(action) {
+    try {
+      // Clear redo stack on manual actions
+      redoStack = [];
+      await invoke("log_deleted_task", { path: logPath, entryJson: JSON.stringify(action) });
+    } catch (err) {
+      showStatus("Err log: " + err);
+    }
+  }
+
   // Action helpers
   function toggleTask(id) {
     const task = tasks.find(t => t.id === id);
     if (task) {
+      logAction({ type: "toggle", id: task.id, oldChecked: task.checked, newChecked: !task.checked });
       task.checked = !task.checked;
       saveFile();
     }
@@ -111,6 +124,7 @@
 
   function moveTaskUp(index) {
     if (index <= 0) return;
+    logAction({ type: "move", fromIndex: index, toIndex: index - 1 });
     const temp = tasks[index];
     tasks[index] = tasks[index - 1];
     tasks[index - 1] = temp;
@@ -119,6 +133,7 @@
 
   function moveTaskDown(index) {
     if (index >= tasks.length - 1) return;
+    logAction({ type: "move", fromIndex: index, toIndex: index + 1 });
     const temp = tasks[index];
     tasks[index] = tasks[index + 1];
     tasks[index + 1] = temp;
@@ -128,20 +143,7 @@
   async function deleteTask(index) {
     const taskToDelete = tasks[index];
     if (taskToDelete) {
-      // Clear redo stack on manual delete action
-      redoStack = [];
-      
-      const entry = {
-        index: index,
-        task: taskToDelete
-      };
-      
-      try {
-        await invoke("log_deleted_task", { path: logPath, entryJson: JSON.stringify(entry) });
-      } catch (err) {
-        showStatus("Err log: " + err);
-      }
-      
+      logAction({ type: "delete", index: index, task: taskToDelete });
       tasks.splice(index, 1);
       saveFile();
     }
@@ -150,6 +152,7 @@
   function indentTask(id) {
     const task = tasks.find(t => t.id === id);
     if (task) {
+      logAction({ type: "indent", id: task.id, oldIndent: task.indent, newIndent: task.indent + 1 });
       task.indent += 1;
       saveFile();
     }
@@ -158,6 +161,7 @@
   function outdentTask(id) {
     const task = tasks.find(t => t.id === id);
     if (task && task.indent > 0) {
+      logAction({ type: "indent", id: task.id, oldIndent: task.indent, newIndent: task.indent - 1 });
       task.indent -= 1;
       saveFile();
     }
@@ -173,12 +177,10 @@
       indent: indent
     };
     
-    if (index === -1) {
-      tasks.push(newTask);
-    } else {
-      tasks.splice(index + 1, 0, newTask);
-    }
+    const insertIndex = index === -1 ? tasks.length : index + 1;
+    logAction({ type: "add", index: insertIndex, task: newTask });
     
+    tasks.splice(insertIndex, 0, newTask);
     focusedTaskId = newId;
     saveFile();
     
@@ -190,39 +192,83 @@
   }
 
   async function clearCompleted() {
-    redoStack = [];
     const completedTasks = tasks
       .map((t, i) => ({ task: t, index: i }))
       .filter(x => x.task.isTask && x.task.checked);
     
-    // Log deleted completed tasks in reverse order to undo sequentially
-    for (let i = completedTasks.length - 1; i >= 0; i--) {
-      const entry = completedTasks[i];
-      try {
-        await invoke("log_deleted_task", { path: logPath, entryJson: JSON.stringify(entry) });
-      } catch (err) {
-        showStatus("Err log: " + err);
-      }
-    }
+    if (completedTasks.length === 0) return;
+    
+    logAction({ type: "clear_completed", deletedTasks: completedTasks });
     
     tasks = tasks.filter(t => !t.isTask || !t.checked);
     saveFile();
   }
 
+  // Core action application function (handles both applying an action and its inverse)
+  function applyAction(action, isInverse) {
+    if (action.type === "delete") {
+      if (isInverse) {
+        tasks.splice(action.index, 0, action.task);
+      } else {
+        const idx = tasks.findIndex(t => t.id === action.task.id);
+        if (idx !== -1) tasks.splice(idx, 1);
+      }
+    } else if (action.type === "add") {
+      if (isInverse) {
+        const idx = tasks.findIndex(t => t.id === action.task.id);
+        if (idx !== -1) tasks.splice(idx, 1);
+      } else {
+        tasks.splice(action.index, 0, action.task);
+      }
+    } else if (action.type === "toggle") {
+      const task = tasks.find(t => t.id === action.id);
+      if (task) {
+        task.checked = isInverse ? action.oldChecked : action.newChecked;
+      }
+    } else if (action.type === "edit") {
+      const task = tasks.find(t => t.id === action.id);
+      if (task) {
+        task.text = isInverse ? action.oldText : action.newText;
+      }
+    } else if (action.type === "move") {
+      const from = isInverse ? action.toIndex : action.fromIndex;
+      const to = isInverse ? action.fromIndex : action.toIndex;
+      if (from >= 0 && from < tasks.length && to >= 0 && to < tasks.length) {
+        const temp = tasks[from];
+        tasks[from] = tasks[to];
+        tasks[to] = temp;
+      }
+    } else if (action.type === "indent") {
+      const task = tasks.find(t => t.id === action.id);
+      if (task) {
+        task.indent = isInverse ? action.oldIndent : action.newIndent;
+      }
+    } else if (action.type === "clear_completed") {
+      if (isInverse) {
+        // Restore in ascending order of original index
+        const sorted = [...action.deletedTasks].sort((a, b) => a.index - b.index);
+        for (const entry of sorted) {
+          tasks.splice(entry.index, 0, entry.task);
+        }
+      } else {
+        const idsToDelete = new Set(action.deletedTasks.map(x => x.task.id));
+        tasks = tasks.filter(t => !idsToDelete.has(t.id));
+      }
+    }
+  }
+
   async function undo() {
     try {
       const poppedLine = await invoke("pop_deleted_task", { path: logPath });
-      const entry = JSON.parse(poppedLine);
+      const action = JSON.parse(poppedLine);
       
-      // Push to redo stack
-      redoStack.push(entry);
+      applyAction(action, true);
+      redoStack.push(action);
       
-      // Restore task at its original index
-      tasks.splice(entry.index, 0, entry.task);
       saveFile();
       showStatus("Undone");
     } catch (err) {
-      if (err.includes("No history")) {
+      if (err.includes("No history") || err.includes("No such file")) {
         showStatus("No Undo");
       } else {
         showStatus("Err Undo: " + err);
@@ -233,21 +279,17 @@
   async function redo() {
     if (redoStack.length === 0) return;
     
-    const entry = redoStack.pop();
-    const targetTask = tasks[entry.index];
+    const action = redoStack.pop();
+    applyAction(action, false);
     
-    // Verify it's the correct task we restored
-    if (targetTask && targetTask.id === entry.task.id) {
-      try {
-        await invoke("log_deleted_task", { path: logPath, entryJson: JSON.stringify(entry) });
-      } catch (err) {
-        showStatus("Err log: " + err);
-      }
-      
-      tasks.splice(entry.index, 1);
-      saveFile();
-      showStatus("Redone");
+    try {
+      await invoke("log_deleted_task", { path: logPath, entryJson: JSON.stringify(action) });
+    } catch (err) {
+      showStatus("Err log: " + err);
     }
+    
+    saveFile();
+    showStatus("Redone");
   }
 
   // Keyboard navigation & editing handlers
@@ -404,11 +446,19 @@
                 class="task-text {task.checked ? 'completed' : ''}" 
                 value={task.text}
                 bind:this={inputElements[task.id]}
-                onfocus={() => focusedTaskId = task.id}
+                onfocus={() => {
+                  focusedTaskId = task.id;
+                  originalTexts[task.id] = task.text;
+                }}
                 onblur={() => {
                   if (focusedTaskId === task.id) {
                     focusedTaskId = "";
                   }
+                  const oldText = originalTexts[task.id];
+                  if (oldText !== undefined && oldText !== task.text) {
+                    logAction({ type: "edit", id: task.id, oldText, newText: task.text });
+                  }
+                  delete originalTexts[task.id];
                 }}
                 oninput={(e) => updateText(task.id, e.target.value)}
                 onkeydown={(e) => handleKeyDown(e, index, task)}
