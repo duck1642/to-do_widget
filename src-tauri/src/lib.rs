@@ -37,6 +37,16 @@ fn get_file_modified_time(path: String) -> Result<u64, String> {
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn set_always_on_top(window: tauri::Window, on_top: bool) -> Result<(), String> {
+    window.set_always_on_top(on_top).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_always_on_bottom(window: tauri::Window, on_bottom: bool) -> Result<(), String> {
+    window.set_always_on_bottom(on_bottom).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -45,7 +55,9 @@ pub fn run() {
             read_todo,
             write_todo,
             get_default_path,
-            get_file_modified_time
+            get_file_modified_time,
+            set_always_on_top,
+            set_always_on_bottom
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

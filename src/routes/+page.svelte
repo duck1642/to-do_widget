@@ -12,6 +12,8 @@
   let editingPath = $state(false);
   let pathInputVal = $state("");
   let statusMessage = $state("");
+  let layerMode = $state("normal");
+  let showModeMenu = $state(false);
 
   // Keep a reference to inputs to set focus programmatically
   let inputElements = {};
@@ -62,6 +64,12 @@
   // Polling folder watcher (lightweight checking)
   onMount(() => {
     loadFile();
+    
+    // Load and apply saved window layering mode
+    const savedMode = localStorage.getItem("todo-layer-mode");
+    if (savedMode) {
+      changeLayerMode(savedMode);
+    }
     
     const interval = setInterval(async () => {
       // Avoid reloading while editing to prevent cursor jumps
@@ -220,15 +228,52 @@
   function closeApp() {
     getCurrentWindow().close();
   }
+
+  async function changeLayerMode(mode) {
+    try {
+      // Reset both flags first
+      await invoke("set_always_on_top", { onTop: false });
+      await invoke("set_always_on_bottom", { onBottom: false });
+
+      if (mode === "top") {
+        await invoke("set_always_on_top", { onTop: true });
+      } else if (mode === "desktop") {
+        await invoke("set_always_on_bottom", { onBottom: true });
+      }
+      
+      layerMode = mode;
+      localStorage.setItem("todo-layer-mode", mode);
+      showStatus("Mode: " + getModeLabel(mode));
+      showModeMenu = false;
+    } catch (err) {
+      showStatus("Err Mode: " + err);
+    }
+  }
+
+  function getModeLabel(mode) {
+    if (mode === "top") return "Top";
+    if (mode === "desktop") return "Desk";
+    return "Norm";
+  }
+
+  function startDrag(event) {
+    if (event.target.tagName !== "BUTTON") {
+      getCurrentWindow().startDragging();
+    }
+  }
 </script>
 
 <main class="app-container">
   <!-- Title / Drag Header -->
-  <header class="drag-header" data-tauri-drag-region>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <header class="drag-header" onmousedown={startDrag} data-tauri-drag-region>
     <span class="title-text" data-tauri-drag-region>
       TO-DO {statusMessage ? `[${statusMessage}]` : ""}
     </span>
     <div class="header-controls">
+      <button class="ascii-btn" onclick={() => showModeMenu = !showModeMenu} title="Window Layer Mode">
+        [M: {getModeLabel(layerMode)}]
+      </button>
       <button class="ascii-btn" onclick={() => editingPath = !editingPath} title="Settings">
         [S]
       </button>
@@ -239,7 +284,21 @@
   </header>
 
   <!-- Content Workspace -->
-  <div class="content-area">
+  <div class="content-area" style="position: relative;">
+    {#if showModeMenu}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="dropdown-menu">
+        <button class="menu-item {layerMode === 'top' ? 'active' : ''}" onclick={() => changeLayerMode("top")}>
+          Always on Top
+        </button>
+        <button class="menu-item {layerMode === 'normal' ? 'active' : ''}" onclick={() => changeLayerMode("normal")}>
+          Normal Window
+        </button>
+        <button class="menu-item {layerMode === 'desktop' ? 'active' : ''}" onclick={() => changeLayerMode("desktop")}>
+          Pin to Desktop
+        </button>
+      </div>
+    {/if}
     {#if editingPath}
       <div class="settings-panel">
         <label for="path-input" class="settings-label">File Path (UTF-8):</label>
@@ -338,7 +397,7 @@
     margin: 0;
     padding: 0;
     font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-    background-color: transparent !important;
+    background-color: var(--bg-panel) !important;
     color: var(--text-color);
     overflow: hidden;
     user-select: none;
@@ -349,7 +408,7 @@
     flex-direction: column;
     width: 100vw;
     height: 100vh;
-    background-color: rgba(26, 26, 26, 0.95);
+    background-color: var(--bg-panel);
     border: 1px solid var(--border-color);
     box-sizing: border-box;
     overflow: hidden;
@@ -557,5 +616,41 @@
   .footer-right {
     display: flex;
     gap: 4px;
+  }
+
+  /* Dropdown Menu Mode Selector */
+  .dropdown-menu {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background-color: var(--bg-header);
+    border: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+    padding: 4px 0;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+    width: 140px;
+  }
+
+  .menu-item {
+    background: transparent;
+    border: none;
+    color: var(--text-color);
+    padding: 6px 12px;
+    font-size: 11px;
+    text-align: left;
+    cursor: pointer;
+    width: 100%;
+    outline: none;
+  }
+
+  .menu-item:hover {
+    background-color: var(--border-color);
+  }
+
+  .menu-item.active {
+    color: var(--accent);
+    font-weight: bold;
   }
 </style>
