@@ -10,6 +10,7 @@
     onCloseApp 
   } = $props();
 
+  /** @param {string} mode */
   function getModeLabel(mode) {
     if (mode === "top") return "Top";
     if (mode === "desktop") return "Desk";

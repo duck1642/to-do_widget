@@ -1,5 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 
+/**
+ * @param {string} currentMode
+ * @param {string} targetMode
+ */
 export async function applyLayerMode(currentMode, targetMode) {
   if (currentMode === targetMode) {
     return targetMode;

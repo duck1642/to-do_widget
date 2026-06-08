@@ -18,6 +18,7 @@
 
   // State variables (Svelte 5 Runes)
   let filePath = $state("");
+  /** @type {any[]} */
   let tasks = $state([]);
   let lastModified = $state(0);
   let focusedTaskId = $state("");
@@ -27,15 +28,19 @@
   let layerMode = $state("normal");
   let showModeMenu = $state(false);
   let logPath = $state("");
+  /** @type {any[]} */
   let redoStack = $state([]);
+  /** @type {Record<string, string>} */
   let originalTexts = {};
   let dragEnabled = $state(true);
   let autostartEnabled = $state(false);
 
   // Keep a reference to inputs to set focus programmatically
+  /** @type {Record<string, HTMLInputElement>} */
   let inputElements = {};
 
   // Status helper
+  /** @param {string} msg */
   function showStatus(msg) {
     statusMessage = msg;
     setTimeout(() => {
@@ -98,6 +103,7 @@
 
   // Polling folder watcher (lightweight checking)
   onMount(() => {
+    /** @type {any} */
     let interval;
 
     (async () => {
@@ -142,6 +148,7 @@
 
 
   // Action logging helper
+  /** @param {any} action */
   async function logAction(action) {
     try {
       // Clear redo stack on manual actions
@@ -153,6 +160,7 @@
   }
 
   // Action helpers
+  /** @param {string} id */
   function toggleTask(id) {
     const task = tasks.find(t => t.id === id);
     if (task) {
@@ -162,6 +170,10 @@
     }
   }
 
+  /**
+   * @param {string} id
+   * @param {string} text
+   */
   function updateText(id, text) {
     const task = tasks.find(t => t.id === id);
     if (task && task.text !== text) {
@@ -170,6 +182,7 @@
     }
   }
 
+  /** @param {number} index */
   function moveTaskUp(index) {
     if (index <= 0) return;
     logAction({ type: "move", fromIndex: index, toIndex: index - 1 });
@@ -179,6 +192,7 @@
     saveFile();
   }
 
+  /** @param {number} index */
   function moveTaskDown(index) {
     if (index >= tasks.length - 1) return;
     logAction({ type: "move", fromIndex: index, toIndex: index + 1 });
@@ -188,6 +202,7 @@
     saveFile();
   }
 
+  /** @param {number} index */
   async function deleteTask(index) {
     const taskToDelete = tasks[index];
     if (taskToDelete) {
@@ -197,6 +212,7 @@
     }
   }
 
+  /** @param {string} id */
   function indentTask(id) {
     const task = tasks.find(t => t.id === id);
     if (task) {
@@ -206,6 +222,7 @@
     }
   }
 
+  /** @param {string} id */
   function outdentTask(id) {
     const task = tasks.find(t => t.id === id);
     if (task && task.indent > 0) {
@@ -215,6 +232,10 @@
     }
   }
 
+  /**
+   * @param {number} index
+   * @param {number} [indent]
+   */
   async function addTask(index, indent = 0) {
     const newTask = createTask(indent);
     const newId = newTask.id;
@@ -257,10 +278,11 @@
       saveFile();
       showStatus("Undone");
     } catch (err) {
-      if (err.includes("No history") || err.includes("No such file")) {
+      const message = String(err);
+      if (message.includes("No history") || message.includes("No such file")) {
         showStatus("No Undo");
       } else {
-        showStatus("Err Undo: " + err);
+        showStatus("Err Undo: " + message);
       }
     }
   }
@@ -282,6 +304,11 @@
   }
 
   // Keyboard navigation & editing handlers
+  /**
+   * @param {KeyboardEvent} event
+   * @param {number} index
+   * @param {any} task
+   */
   async function handleKeyDown(event, index, task) {
     if (event.key === "Tab") {
       event.preventDefault();
@@ -316,7 +343,9 @@
         }
       }
     } else if (event.key === "Escape") {
-      event.target.blur();
+      if (event.target instanceof HTMLElement) {
+        event.target.blur();
+      }
     }
   }
 
@@ -347,6 +376,7 @@
     getCurrentWindow().close();
   }
 
+  /** @param {string} mode */
   async function changeLayerMode(mode) {
     try {
       layerMode = await applyLayerMode(layerMode, mode);
@@ -358,6 +388,10 @@
     }
   }
 
+  /**
+   * @param {string} mode
+   * @returns {string}
+   */
   function getModeLabel(mode) {
     if (mode === "top") return "Top";
     if (mode === "desktop") return "Desk";
@@ -425,11 +459,11 @@
         onMoveTaskUp={moveTaskUp}
         onMoveTaskDown={moveTaskDown}
         onDeleteTask={deleteTask}
-        onFocus={(id, text) => {
+        onFocus={(/** @type {string} */ id, /** @type {string} */ text) => {
           focusedTaskId = id;
           originalTexts[id] = text;
         }}
-        onBlur={(id, text) => {
+        onBlur={(/** @type {string} */ id, /** @type {string} */ text) => {
           if (focusedTaskId === id) {
             focusedTaskId = "";
           }

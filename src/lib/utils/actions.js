@@ -1,3 +1,8 @@
+/**
+ * @param {any[]} tasks
+ * @param {any} action
+ * @param {boolean} isInverse
+ */
 export function applyAction(tasks, action, isInverse) {
   let updatedTasks = [...tasks];
   if (action.type === "delete") {
@@ -45,7 +50,7 @@ export function applyAction(tasks, action, isInverse) {
         updatedTasks.splice(entry.index, 0, entry.task);
       }
     } else {
-      const idsToDelete = new Set(action.deletedTasks.map(x => x.task.id));
+      const idsToDelete = new Set(action.deletedTasks.map((/** @type {any} */ x) => x.task.id));
       updatedTasks = updatedTasks.filter(t => !idsToDelete.has(t.id));
     }
   }

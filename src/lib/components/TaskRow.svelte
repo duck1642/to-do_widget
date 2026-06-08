@@ -47,7 +47,7 @@
     bind:this={inputEl}
     onfocus={() => onFocus(task.id, task.text)}
     onblur={() => onBlur(task.id, task.text)}
-    oninput={(e) => onUpdateText(task.id, e.target.value)}
+    oninput={(e) => onUpdateText(task.id, e.currentTarget.value)}
     onkeydown={(e) => onKeyDown(e, index, task)}
     placeholder="New Task..."
   />

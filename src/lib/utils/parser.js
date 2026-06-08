@@ -4,7 +4,7 @@
  * Preserves non-task lines (headers, notes, empty lines) to avoid data loss.
  *
  * @param {string} markdown - The markdown content.
- * @returns {Array} List of line objects.
+ * @returns {any[]} List of line objects.
  */
 export function markdownToTasks(markdown) {
   if (!markdown) return [];
@@ -54,7 +54,7 @@ export function markdownToTasks(markdown) {
 /**
  * Converts a list of line objects back to a markdown string.
  *
- * @param {Array} tasks - The line objects.
+ * @param {any[]} tasks - The line objects.
  * @returns {string} The markdown content.
  */
 export function tasksToMarkdown(tasks) {
