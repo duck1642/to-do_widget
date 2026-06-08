@@ -258,6 +258,9 @@ fn set_desktop_parent(window: tauri::Window, enable: bool) -> Result<(), String>
 
                     // Subclass the window to intercept WM_GETDLGCODE and handle Tab keys correctly.
                     let original = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, subclass_wndproc as *const () as isize);
+                    if original == 0 {
+                        return Err("Failed to subclass window".to_string());
+                    }
                     ORIGINAL_WNDPROC = Some(std::mem::transmute(original));
                 }
 
