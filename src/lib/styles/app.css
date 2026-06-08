@@ -1,0 +1,398 @@
+:root {
+  --bg-dark: #121212;
+  --bg-panel: #1a1a1a;
+  --bg-header: #222222;
+  --border-color: #2e2e2e;
+  --text-color: #e0e0e0;
+  --text-muted: #757575;
+  --accent: #00adb5;
+}
+
+/* Reset and base styles */
+:global(html), :global(body) {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-panel) !important;
+}
+
+:global(body) {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--text-color);
+  user-select: none;
+  position: relative;
+}
+
+.app-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Header zone */
+.drag-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  background-color: var(--bg-header);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 8px;
+  cursor: default;
+  flex: none;
+}
+
+.drag-header.draggable {
+  cursor: move;
+}
+
+.title-text {
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.header-controls {
+  display: flex;
+  gap: 4px;
+}
+
+/* Content body */
+.content-area {
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Settings view */
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+
+.settings-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.settings-toggle-row-spaced {
+  margin-top: 4px;
+}
+
+.clickable-label {
+  user-select: none;
+  cursor: pointer;
+}
+
+.settings-input {
+  background-color: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  padding: 6px;
+  font-size: 12px;
+  outline: none;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Tasks view */
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: max-content;
+  min-width: 100%;
+}
+
+.task-row {
+  display: flex;
+  align-items: center;
+  padding: 2px 4px;
+  border-radius: 2px;
+  min-width: 100%;
+  width: max-content;
+  box-sizing: border-box;
+}
+
+.custom-check-btn {
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  cursor: pointer;
+  background: var(--bg-dark);
+  border: 1.5px solid #444444;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.custom-check-btn:hover {
+  border-color: #666666;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.custom-check-btn:active {
+  border-color: #888888;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.custom-check-btn.checked {
+  border-color: rgba(255, 255, 255, 0.85);
+  background: #2e2e2e;
+  color: #ffffff;
+}
+
+.custom-check-btn.checked:hover {
+  border-color: #ffffff;
+  background: #383838;
+}
+
+.custom-check-btn.checked:active {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: #252525;
+}
+
+.task-text {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  font-size: 13px;
+  outline: none;
+  padding: 2px 0;
+  min-width: 150px; /* Prevent text input from collapsing on deep indentation */
+}
+
+.task-text.completed {
+  text-decoration: line-through;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+/* Raw lines rendering */
+.raw-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  background-color: rgba(255, 255, 255, 0.02);
+  border-left: 2px solid var(--text-muted);
+  margin: 4px 0;
+  min-width: 100%;
+  width: max-content;
+  box-sizing: border-box;
+}
+
+.raw-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.empty-state {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding-top: 40px;
+}
+
+/* Controls visibility on hover */
+.row-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.task-row:hover .row-actions,
+.raw-row:hover .row-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Buttons */
+.icon-btn-header {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border-radius: 4px;
+}
+
+.icon-btn-header:hover {
+  color: var(--text-color);
+  background-color: var(--border-color);
+}
+
+.icon-btn-header.close:hover {
+  color: #ff5555;
+  background-color: rgba(255, 85, 85, 0.1);
+}
+
+.btn-text {
+  font-size: 9px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.row-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+}
+
+.row-btn:hover {
+  color: var(--text-color);
+  background-color: var(--border-color);
+}
+
+.row-btn.del:hover {
+  color: #ff5555;
+  background-color: rgba(255, 85, 85, 0.1);
+}
+
+.action-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  padding: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.action-btn:hover:not(:disabled) {
+  background-color: var(--bg-header);
+  border-color: var(--text-muted);
+}
+
+.action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Bottom status bar */
+.bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  background-color: var(--bg-header);
+  border-top: 1px solid var(--border-color);
+  padding: 0 8px;
+  flex: none;
+}
+
+.footer-right {
+  display: flex;
+  gap: 4px;
+}
+
+/* Dropdown Menu Mode Selector */
+.dropdown-menu {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background-color: var(--bg-header);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  padding: 4px 0;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+  width: 140px;
+}
+
+.menu-item {
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  padding: 6px 12px;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  outline: none;
+}
+
+.menu-item:hover {
+  background-color: var(--border-color);
+}
+
+.menu-item.active {
+  color: var(--accent);
+  font-weight: bold;
+}
+
+/* Custom dark scrollbar styling for WebKit (Edge WebView2) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333333;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #444444;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Hide focus outlines globally */
+* {
+  outline: none;
+}
+*:focus {
+  outline: none;
+}
