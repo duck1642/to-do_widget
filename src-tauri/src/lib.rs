@@ -158,15 +158,11 @@ unsafe extern "system" fn subclass_wndproc(
     wparam: windows_sys::Win32::Foundation::WPARAM,
     lparam: windows_sys::Win32::Foundation::LPARAM,
 ) -> windows_sys::Win32::Foundation::LRESULT {
-    use windows_sys::Win32::UI::WindowsAndMessaging::{CallWindowProcW, WM_GETDLGCODE, WM_ERASEBKGND};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{CallWindowProcW, WM_GETDLGCODE};
     const DLGC_WANTALLKEYS: windows_sys::Win32::Foundation::LRESULT = 0x0004;
 
     if msg == WM_GETDLGCODE {
         return DLGC_WANTALLKEYS;
-    }
-
-    if msg == WM_ERASEBKGND {
-        return 1; // Prevent background erasing to maintain transparency in desktop mode
     }
 
     if let Some(orig) = ORIGINAL_WNDPROC {
