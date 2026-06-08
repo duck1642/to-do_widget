@@ -1,22 +1,20 @@
 <script>
   import { onMount, tick } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { markdownToTasks, tasksToMarkdown } from "$lib/utils/parser.js";
   import { getLogPath } from "$lib/utils/paths.js";
   import { createTask } from "$lib/utils/tasks.js";
   import { applyAction } from "$lib/utils/actions.js";
+  import * as autostartService from "$lib/services/autostart.js";
+  import * as configService from "$lib/services/config.js";
+  import * as todoFileService from "$lib/services/todoFile.js";
+  import { applyLayerMode } from "$lib/services/windowLayer.js";
   import "$lib/styles/app.css";
   import AppHeader from "$lib/components/AppHeader.svelte";
   import LayerMenu from "$lib/components/LayerMenu.svelte";
   import BottomBar from "$lib/components/BottomBar.svelte";
   import TaskList from "$lib/components/TaskList.svelte";
   import SettingsPanel from "$lib/components/SettingsPanel.svelte";
-  import { 
-    enable as enableAutostart, 
-    disable as disableAutostart, 
-    isEnabled as isAutostartEnabled 
-  } from "@tauri-apps/plugin-autostart";
 
   // State variables (Svelte 5 Runes)
   let filePath = $state("");
@@ -51,17 +49,17 @@
   async function loadFile() {
     try {
       if (!filePath) {
-        filePath = await invoke("get_default_path");
+        filePath = await todoFileService.getDefaultPath();
         pathInputVal = filePath;
       }
       
       logPath = getLogPath(filePath);
       
-      const content = await invoke("read_todo", { path: filePath });
+      const content = await todoFileService.readTodo(filePath);
       tasks = markdownToTasks(content);
       
       // Update last modified timestamp
-      lastModified = await invoke("get_file_modified_time", { path: filePath });
+      lastModified = await todoFileService.getFileModifiedTime(filePath);
       showStatus("Loaded");
       return true;
     } catch (err) {
@@ -74,10 +72,10 @@
   async function saveFile() {
     try {
       const content = tasksToMarkdown(tasks);
-      await invoke("write_todo", { path: filePath, content });
+      await todoFileService.writeTodo(filePath, content);
       
       // Update local modification timestamp
-      lastModified = await invoke("get_file_modified_time", { path: filePath });
+      lastModified = await todoFileService.getFileModifiedTime(filePath);
       showStatus("Saved");
     } catch (err) {
       showStatus("Err: " + err);
@@ -87,13 +85,11 @@
   // Helper to save current config to the backend config.json
   async function saveConfig() {
     try {
-      await invoke("write_config", {
-        config: {
-          file_path: filePath,
-          layer_mode: layerMode,
-          drag_enabled: dragEnabled,
-          autostart_enabled: autostartEnabled
-        }
+      await configService.writeConfig({
+        file_path: filePath,
+        layer_mode: layerMode,
+        drag_enabled: dragEnabled,
+        autostart_enabled: autostartEnabled
       });
     } catch (err) {
       showStatus("Err Config Save: " + err);
@@ -106,13 +102,13 @@
 
     (async () => {
       try {
-        const config = await invoke("read_config");
+        const config = await configService.readConfig();
         filePath = config.file_path;
         pathInputVal = filePath;
         dragEnabled = config.drag_enabled;
 
         try {
-          autostartEnabled = await isAutostartEnabled();
+          autostartEnabled = await autostartService.isEnabled();
         } catch {
           autostartEnabled = config.autostart_enabled;
         }
@@ -129,7 +125,7 @@
         if (focusedTaskId || editingPath || !filePath) return;
         
         try {
-          const modTime = await invoke("get_file_modified_time", { path: filePath });
+          const modTime = await todoFileService.getFileModifiedTime(filePath);
           if (modTime !== lastModified) {
             await loadFile();
           }
@@ -150,7 +146,7 @@
     try {
       // Clear redo stack on manual actions
       redoStack = [];
-      await invoke("log_deleted_task", { path: logPath, entryJson: JSON.stringify(action) });
+      await todoFileService.logDeletedTask(logPath, JSON.stringify(action));
     } catch (err) {
       showStatus("Err log: " + err);
     }
@@ -252,7 +248,7 @@
 
   async function undo() {
     try {
-      const poppedLine = await invoke("pop_deleted_task", { path: logPath });
+      const poppedLine = await todoFileService.popDeletedTask(logPath);
       const action = JSON.parse(poppedLine);
       
       tasks = applyAction(tasks, action, true);
@@ -276,7 +272,7 @@
     tasks = applyAction(tasks, action, false);
     
     try {
-      await invoke("log_deleted_task", { path: logPath, entryJson: JSON.stringify(action) });
+      await todoFileService.logDeletedTask(logPath, JSON.stringify(action));
     } catch (err) {
       showStatus("Err log: " + err);
     }
@@ -352,27 +348,8 @@
   }
 
   async function changeLayerMode(mode) {
-    if (mode === layerMode) {
-      showModeMenu = false;
-      return;
-    }
-
     try {
-      // If leaving desktop mode, unparent first
-      if (layerMode === "desktop" && mode !== "desktop") {
-        await invoke("set_desktop_parent", { enable: false });
-      }
-
-      // Reset top flag (always on bottom is removed)
-      await invoke("set_always_on_top", { onTop: false });
-
-      if (mode === "top") {
-        await invoke("set_always_on_top", { onTop: true });
-      } else if (mode === "desktop") {
-        await invoke("set_desktop_parent", { enable: true });
-      }
-      
-      layerMode = mode;
+      layerMode = await applyLayerMode(layerMode, mode);
       await saveConfig();
       showStatus("Mode: " + getModeLabel(mode));
       showModeMenu = false;
@@ -396,11 +373,11 @@
   async function toggleAutostart() {
     try {
       if (autostartEnabled) {
-        await disableAutostart();
+        await autostartService.disable();
         autostartEnabled = false;
         showStatus("Autostart Off");
       } else {
-        await enableAutostart();
+        await autostartService.enable();
         autostartEnabled = true;
         showStatus("Autostart On");
       }
