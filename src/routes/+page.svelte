@@ -372,6 +372,10 @@
     editingPath = false;
   }
 
+  function shrinkApp() {
+    getCurrentWindow().hide();
+  }
+
   function closeApp() {
     getCurrentWindow().close();
   }
@@ -432,6 +436,7 @@
     statusMessage={statusMessage}
     onToggleModeMenu={() => showModeMenu = !showModeMenu}
     onToggleSettings={() => editingPath = !editingPath}
+    onShrinkApp={shrinkApp}
     onCloseApp={closeApp}
   />
 

@@ -1,5 +1,5 @@
 <script>
-  import { Settings, Layers, X } from "@lucide/svelte";
+  import { Settings, Layers, X, Minus } from "@lucide/svelte";
 
   let { 
     dragEnabled, 
@@ -7,6 +7,7 @@
     statusMessage, 
     onToggleModeMenu, 
     onToggleSettings, 
+    onShrinkApp,
     onCloseApp 
   } = $props();
 
@@ -29,6 +30,9 @@
     </button>
     <button class="icon-btn-header" onclick={onToggleSettings} title="Settings">
       <Settings size={13} />
+    </button>
+    <button class="icon-btn-header" onclick={onShrinkApp} title="Shrink to Tray">
+      <Minus size={13} />
     </button>
     <button class="icon-btn-header close" onclick={onCloseApp} title="Close">
       <X size={13} />
