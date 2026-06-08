@@ -86,25 +86,36 @@
     }
   }
 
-  // Polling folder watcher (lightweight checking)
-  onMount(() => {
-    loadFile();
-    
-    // Check if autostart is enabled
-    isAutostartEnabled().then(val => {
-      autostartEnabled = val;
-    }).catch(() => {});
-
-    // Load and apply saved window layering mode
-    const savedMode = localStorage.getItem("todo-layer-mode");
-    if (savedMode) {
-      changeLayerMode(savedMode);
+  // Helper to save current config to the backend config.json
+  async function saveConfig() {
+    try {
+      await invoke("write_config", {
+        config: {
+          file_path: filePath,
+          layer_mode: layerMode,
+          drag_enabled: dragEnabled,
+          autostart_enabled: autostartEnabled
+        }
+      });
+    } catch (err) {
+      showStatus("Err Config Save: " + err);
     }
+  }
 
-    // Load drag enabled setting
-    const savedDrag = localStorage.getItem("todo-drag-enabled");
-    if (savedDrag !== null) {
-      dragEnabled = savedDrag === "true";
+  // Polling folder watcher (lightweight checking)
+  onMount(async () => {
+    try {
+      const config = await invoke("read_config");
+      filePath = config.file_path;
+      pathInputVal = filePath;
+      dragEnabled = config.drag_enabled;
+      autostartEnabled = config.autostart_enabled;
+      
+      await loadFile();
+      await changeLayerMode(config.layer_mode);
+    } catch (err) {
+      showStatus("Err Config Load: " + err);
+      await loadFile();
     }
     
     const interval = setInterval(async () => {
@@ -363,11 +374,12 @@
     }
   }
 
-  function savePath() {
+  async function savePath() {
     if (pathInputVal.trim()) {
       filePath = pathInputVal.trim();
       editingPath = false;
-      loadFile();
+      await loadFile();
+      await saveConfig();
     }
   }
 
@@ -399,7 +411,7 @@
       }
       
       layerMode = mode;
-      localStorage.setItem("todo-layer-mode", mode);
+      await saveConfig();
       showStatus("Mode: " + getModeLabel(mode));
       showModeMenu = false;
     } catch (err) {
@@ -413,9 +425,9 @@
     return "Norm";
   }
 
-  function toggleDrag() {
+  async function toggleDrag() {
     dragEnabled = !dragEnabled;
-    localStorage.setItem("todo-drag-enabled", dragEnabled.toString());
+    await saveConfig();
     showStatus(dragEnabled ? "Drag On" : "Drag Off");
   }
 
@@ -430,6 +442,7 @@
         autostartEnabled = true;
         showStatus("Autostart On");
       }
+      await saveConfig();
     } catch (err) {
       showStatus("Err Startup: " + err);
     }

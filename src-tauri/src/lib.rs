@@ -88,15 +88,73 @@ fn pop_deleted_task(path: String) -> Result<String, String> {
     Ok(last_line)
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct AppConfig {
+    file_path: String,
+    layer_mode: String,
+    drag_enabled: bool,
+    autostart_enabled: bool,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            file_path: get_default_path(),
+            layer_mode: "normal".to_string(),
+            drag_enabled: true,
+            autostart_enabled: false,
+        }
+    }
+}
+
+fn get_config_path() -> std::path::PathBuf {
+    if cfg!(debug_assertions) {
+        if let Ok(cwd) = std::env::current_dir() {
+            if cwd.ends_with("src-tauri") {
+                if let Some(parent) = cwd.parent() {
+                    return parent.join("config.json");
+                }
+            }
+            return cwd.join("config.json");
+        }
+    } else if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(parent) = exe_path.parent() {
+            return parent.join("config.json");
+        }
+    }
+    std::path::PathBuf::from("config.json")
+}
+
+#[tauri::command]
+fn read_config() -> Result<AppConfig, String> {
+    let path = get_config_path();
+    if !path.exists() {
+        let default_config = AppConfig::default();
+        let json = serde_json::to_string_pretty(&default_config).map_err(|e| e.to_string())?;
+        fs::write(&path, json).map_err(|e| e.to_string())?;
+        return Ok(default_config);
+    }
+    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let config: AppConfig = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+    Ok(config)
+}
+
+#[tauri::command]
+fn write_config(config: AppConfig) -> Result<(), String> {
+    let path = get_config_path();
+    let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    fs::write(&path, json).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 fn set_desktop_parent(window: tauri::Window, enable: bool) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         use windows_sys::Win32::Foundation::HWND;
         use windows_sys::Win32::UI::WindowsAndMessaging::{
-            FindWindowExW, GetShellWindow, GetWindowLongW, SetParent, SetWindowLongW, SetWindowPos,
-            GWL_STYLE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
-            WS_CHILD, WS_POPUP,
+            FindWindowW, GetShellWindow, SetParent, SetWindowPos, SWP_NOMOVE, SWP_NOSIZE,
+            SWP_NOACTIVATE, SWP_SHOWWINDOW, SWP_FRAMECHANGED,
         };
 
         let to_wide = |s: &str| -> Vec<u16> {
@@ -106,48 +164,10 @@ fn set_desktop_parent(window: tauri::Window, enable: bool) -> Result<(), String>
         let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as HWND;
 
         if enable {
-            let shell_w = unsafe { GetShellWindow() };
-            if shell_w == 0 {
-                return Err("Default shell window not found".to_string());
-            }
-
-            let has_def_view_direct = unsafe {
-                FindWindowExW(
-                    shell_w,
-                    0,
-                    to_wide("SHELLDLL_DefView").as_ptr(),
-                    std::ptr::null(),
-                )
-            };
-
-            let mut parent_hwnd = 0;
-
-            if has_def_view_direct != 0 {
-                parent_hwnd = shell_w;
-            } else {
-                let mut worker_w = 0;
-                unsafe {
-                    while {
-                        worker_w = FindWindowExW(
-                            0,
-                            worker_w,
-                            to_wide("WorkerW").as_ptr(),
-                            std::ptr::null(),
-                        );
-                        worker_w != 0
-                    } {
-                        let def_view = FindWindowExW(
-                            worker_w,
-                            0,
-                            to_wide("SHELLDLL_DefView").as_ptr(),
-                            std::ptr::null(),
-                        );
-                        if def_view != 0 {
-                            parent_hwnd = worker_w;
-                            break;
-                        }
-                    }
-                }
+            // Find Progman window
+            let mut parent_hwnd = unsafe { FindWindowW(to_wide("Progman").as_ptr(), std::ptr::null()) };
+            if parent_hwnd == 0 {
+                parent_hwnd = unsafe { GetShellWindow() };
             }
 
             if parent_hwnd == 0 {
@@ -155,13 +175,7 @@ fn set_desktop_parent(window: tauri::Window, enable: bool) -> Result<(), String>
             }
 
             unsafe {
-                // Update style: Remove WS_POPUP, Add WS_CHILD
-                let mut style = GetWindowLongW(hwnd, GWL_STYLE);
-                style &= !(WS_POPUP as i32);
-                style |= WS_CHILD as i32;
-                SetWindowLongW(hwnd, GWL_STYLE, style);
-
-                // Re-parent
+                // Re-parent to Progman directly without changing window styles to WS_CHILD
                 SetParent(hwnd, parent_hwnd);
 
                 // Set position and trigger recalculation with SWP_FRAMECHANGED
@@ -180,13 +194,7 @@ fn set_desktop_parent(window: tauri::Window, enable: bool) -> Result<(), String>
                 // Re-parent to desktop root (0)
                 SetParent(hwnd, 0);
 
-                // Update style: Remove WS_CHILD, Add WS_POPUP
-                let mut style = GetWindowLongW(hwnd, GWL_STYLE);
-                style &= !(WS_CHILD as i32);
-                style |= WS_POPUP as i32;
-                SetWindowLongW(hwnd, GWL_STYLE, style);
-
-                // Set position and trigger recalculation with SWP_FRAMECHANGED
+                // Set position and trigger recalculation
                 SetWindowPos(
                     hwnd,
                     0, // HWND_TOP
@@ -272,7 +280,9 @@ pub fn run() {
             set_always_on_bottom,
             log_deleted_task,
             pop_deleted_task,
-            set_desktop_parent
+            set_desktop_parent,
+            read_config,
+            write_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
