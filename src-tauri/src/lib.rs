@@ -94,7 +94,7 @@ fn set_desktop_parent(window: tauri::Window, enable: bool) -> Result<(), String>
     {
         use windows_sys::Win32::Foundation::HWND;
         use windows_sys::Win32::UI::WindowsAndMessaging::{
-            FindWindowExW, GetShellWindow, SetParent, SetWindowPos, HWND_BOTTOM, SWP_NOACTIVATE,
+            FindWindowExW, GetShellWindow, SetParent, SetWindowPos, SWP_NOACTIVATE,
             SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
         };
 
@@ -157,7 +157,7 @@ fn set_desktop_parent(window: tauri::Window, enable: bool) -> Result<(), String>
                 SetParent(hwnd, parent_hwnd);
                 SetWindowPos(
                     hwnd,
-                    HWND_BOTTOM,
+                    0, // HWND_TOP (0) places it in front of other siblings (like SHELLDLL_DefView)
                     0,
                     0,
                     0,
