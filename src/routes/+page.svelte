@@ -51,6 +51,12 @@
     }, 2000);
   }
 
+  // Get log file path corresponding to the todo file path
+  function getLogPath(path) {
+    const replaced = path.replace(/\.[^\\/]+$/, ".jsonl");
+    return replaced === path ? `${path}.jsonl` : replaced;
+  }
+
   // Load markdown tasks from file
   async function loadFile() {
     try {
@@ -59,7 +65,7 @@
         pathInputVal = filePath;
       }
       
-      logPath = filePath.replace(/\.md$/, ".jsonl");
+      logPath = getLogPath(filePath);
       
       const content = await invoke("read_todo", { path: filePath });
       tasks = markdownToTasks(content);
@@ -67,8 +73,10 @@
       // Update last modified timestamp
       lastModified = await invoke("get_file_modified_time", { path: filePath });
       showStatus("Loaded");
+      return true;
     } catch (err) {
       showStatus("Err: " + err);
+      return false;
     }
   }
 
@@ -103,36 +111,47 @@
   }
 
   // Polling folder watcher (lightweight checking)
-  onMount(async () => {
-    try {
-      const config = await invoke("read_config");
-      filePath = config.file_path;
-      pathInputVal = filePath;
-      dragEnabled = config.drag_enabled;
-      autostartEnabled = config.autostart_enabled;
-      
-      await loadFile();
-      await changeLayerMode(config.layer_mode);
-    } catch (err) {
-      showStatus("Err Config Load: " + err);
-      await loadFile();
-    }
-    
-    const interval = setInterval(async () => {
-      // Avoid reloading while editing to prevent cursor jumps
-      if (focusedTaskId || editingPath || !filePath) return;
-      
+  onMount(() => {
+    let interval;
+
+    (async () => {
       try {
-        const modTime = await invoke("get_file_modified_time", { path: filePath });
-        if (modTime !== lastModified) {
-          await loadFile();
+        const config = await invoke("read_config");
+        filePath = config.file_path;
+        pathInputVal = filePath;
+        dragEnabled = config.drag_enabled;
+
+        try {
+          autostartEnabled = await isAutostartEnabled();
+        } catch {
+          autostartEnabled = config.autostart_enabled;
         }
-      } catch (e) {
-        // Silently skip transient file locked errors on Windows
+        
+        await loadFile();
+        await changeLayerMode(config.layer_mode);
+      } catch (err) {
+        showStatus("Err Config Load: " + err);
+        await loadFile();
       }
-    }, 2000);
-    
-    return () => clearInterval(interval);
+      
+      interval = setInterval(async () => {
+        // Avoid reloading while editing to prevent cursor jumps
+        if (focusedTaskId || editingPath || !filePath) return;
+        
+        try {
+          const modTime = await invoke("get_file_modified_time", { path: filePath });
+          if (modTime !== lastModified) {
+            await loadFile();
+          }
+        } catch (e) {
+          // Silently skip transient file locked errors on Windows
+        }
+      }, 2000);
+    })();
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   });
 
 
@@ -375,12 +394,21 @@
   }
 
   async function savePath() {
-    if (pathInputVal.trim()) {
-      filePath = pathInputVal.trim();
-      editingPath = false;
-      await loadFile();
-      await saveConfig();
+    const newPath = pathInputVal.trim();
+    if (!newPath) return;
+
+    const oldPath = filePath;
+    filePath = newPath;
+
+    const ok = await loadFile();
+    if (!ok) {
+      filePath = oldPath;
+      pathInputVal = oldPath;
+      return;
     }
+
+    editingPath = false;
+    await saveConfig();
   }
 
   function cancelPathEdit() {
@@ -393,22 +421,24 @@
   }
 
   async function changeLayerMode(mode) {
+    if (mode === layerMode) {
+      showModeMenu = false;
+      return;
+    }
+
     try {
       // If leaving desktop mode, unparent first
       if (layerMode === "desktop" && mode !== "desktop") {
         await invoke("set_desktop_parent", { enable: false });
       }
 
-      // Reset both flags first
+      // Reset top flag (always on bottom is removed)
       await invoke("set_always_on_top", { onTop: false });
-      await invoke("set_always_on_bottom", { onBottom: false });
 
       if (mode === "top") {
         await invoke("set_always_on_top", { onTop: true });
       } else if (mode === "desktop") {
         await invoke("set_desktop_parent", { enable: true });
-        // Do NOT call set_always_on_bottom here.
-        // Desktop parenting already makes it a desktop-level window.
       }
       
       layerMode = mode;
@@ -454,43 +484,23 @@
 
 <main class="app-container">
   <!-- Title / Drag Header -->
-  {#if dragEnabled}
-    <header class="drag-header draggable" data-tauri-drag-region>
-      <span class="title-text" data-tauri-drag-region>
-        TO-DO {statusMessage ? `[${statusMessage}]` : ""}
-      </span>
-      <div class="header-controls">
-        <button class="icon-btn-header" onclick={() => showModeMenu = !showModeMenu} title="Window Layer Mode">
-          <Layers size={13} />
-          <span class="btn-text">{getModeLabel(layerMode)}</span>
-        </button>
-        <button class="icon-btn-header" onclick={() => editingPath = !editingPath} title="Settings">
-          <Settings size={13} />
-        </button>
-        <button class="icon-btn-header close" onclick={closeApp} title="Close">
-          <X size={13} />
-        </button>
-      </div>
-    </header>
-  {:else}
-    <header class="drag-header">
-      <span class="title-text">
-        TO-DO {statusMessage ? `[${statusMessage}]` : ""}
-      </span>
-      <div class="header-controls">
-        <button class="icon-btn-header" onclick={() => showModeMenu = !showModeMenu} title="Window Layer Mode">
-          <Layers size={13} />
-          <span class="btn-text">{getModeLabel(layerMode)}</span>
-        </button>
-        <button class="icon-btn-header" onclick={() => editingPath = !editingPath} title="Settings">
-          <Settings size={13} />
-        </button>
-        <button class="icon-btn-header close" onclick={closeApp} title="Close">
-          <X size={13} />
-        </button>
-      </div>
-    </header>
-  {/if}
+  <header class="drag-header" class:draggable={dragEnabled} data-tauri-drag-region={dragEnabled ? true : undefined}>
+    <span class="title-text" data-tauri-drag-region={dragEnabled ? true : undefined}>
+      TO-DO {statusMessage ? `[${statusMessage}]` : ""}
+    </span>
+    <div class="header-controls">
+      <button class="icon-btn-header" onclick={() => showModeMenu = !showModeMenu} title="Window Layer Mode">
+        <Layers size={13} />
+        <span class="btn-text">{getModeLabel(layerMode)}</span>
+      </button>
+      <button class="icon-btn-header" onclick={() => editingPath = !editingPath} title="Settings">
+        <Settings size={13} />
+      </button>
+      <button class="icon-btn-header close" onclick={closeApp} title="Close">
+        <X size={13} />
+      </button>
+    </div>
+  </header>
 
   <!-- Content Workspace -->
   <div class="content-area" style="position: relative;">
@@ -522,7 +532,7 @@
         <!-- Window Dragging Toggle -->
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="settings-toggle-row" style="display: flex; align-items: center; gap: 6px; cursor: pointer;" onclick={toggleDrag}>
+        <div class="settings-toggle-row" onclick={toggleDrag}>
           <button 
             type="button"
             class="custom-check-btn {dragEnabled ? 'checked' : ''}" 
@@ -532,7 +542,7 @@
               <Check size={10} strokeWidth={4} />
             {/if}
           </button>
-          <span class="settings-label" style="user-select: none; cursor: pointer;">
+          <span class="settings-label clickable-label">
             Window Dragging
           </span>
         </div>
@@ -540,7 +550,7 @@
         <!-- Autostart Toggle -->
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="settings-toggle-row" style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin-top: 4px;" onclick={toggleAutostart}>
+        <div class="settings-toggle-row settings-toggle-row-spaced" onclick={toggleAutostart}>
           <button 
             type="button"
             class="custom-check-btn {autostartEnabled ? 'checked' : ''}" 
@@ -550,7 +560,7 @@
               <Check size={10} strokeWidth={4} />
             {/if}
           </button>
-          <span class="settings-label" style="user-select: none; cursor: pointer;">
+          <span class="settings-label clickable-label">
             Start on Boot
           </span>
         </div>
@@ -751,6 +761,22 @@
   .settings-label {
     font-size: 12px;
     color: var(--text-muted);
+  }
+
+  .settings-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+
+  .settings-toggle-row-spaced {
+    margin-top: 4px;
+  }
+
+  .clickable-label {
+    user-select: none;
+    cursor: pointer;
   }
 
   .settings-input {

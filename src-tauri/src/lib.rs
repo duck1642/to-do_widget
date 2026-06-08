@@ -43,10 +43,6 @@ fn set_always_on_top(window: tauri::Window, on_top: bool) -> Result<(), String> 
     window.set_always_on_top(on_top).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-fn set_always_on_bottom(window: tauri::Window, on_bottom: bool) -> Result<(), String> {
-    window.set_always_on_bottom(on_bottom).map_err(|e| e.to_string())
-}
 
 #[tauri::command]
 fn log_deleted_task(path: String, entry_json: String) -> Result<(), String> {
@@ -247,21 +243,23 @@ fn set_desktop_parent(window: tauri::Window, enable: bool) -> Result<(), String>
             let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as HWND;
 
             if enable {
-                let parent = find_desktop_parent();
+                if (*std::ptr::addr_of!(ORIGINAL_WNDPROC)).is_none() {
+                    let parent = find_desktop_parent();
 
-                if parent == 0 {
-                    return Err("Could not find desktop parent window".to_string());
+                    if parent == 0 {
+                        return Err("Could not find desktop parent window".to_string());
+                    }
+
+                    let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+                    let new_style = (style & !WS_POPUP) | WS_CHILD;
+
+                    SetWindowLongPtrW(hwnd, GWL_STYLE, new_style as isize);
+                    SetParent(hwnd, parent);
+
+                    // Subclass the window to intercept WM_GETDLGCODE and handle Tab keys correctly.
+                    let original = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, subclass_wndproc as *const () as isize);
+                    ORIGINAL_WNDPROC = Some(std::mem::transmute(original));
                 }
-
-                let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
-                let new_style = (style & !WS_POPUP) | WS_CHILD;
-
-                SetWindowLongPtrW(hwnd, GWL_STYLE, new_style as isize);
-                SetParent(hwnd, parent);
-
-                // Subclass the window to intercept WM_GETDLGCODE and handle Tab keys correctly.
-                let original = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, subclass_wndproc as *const () as isize);
-                ORIGINAL_WNDPROC = Some(std::mem::transmute(original));
 
                 SetWindowPos(
                     hwnd,
@@ -378,7 +376,6 @@ pub fn run() {
             get_default_path,
             get_file_modified_time,
             set_always_on_top,
-            set_always_on_bottom,
             log_deleted_task,
             pop_deleted_task,
             set_desktop_parent,

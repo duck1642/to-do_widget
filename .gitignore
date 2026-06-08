@@ -35,3 +35,4 @@ src-tauri/gen/schemas/
 # Local tasks file
 todo.md
 todo.jsonl
+config.json
