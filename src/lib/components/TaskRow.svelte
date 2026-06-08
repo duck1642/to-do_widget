@@ -17,6 +17,18 @@
 
   let inputEl = $state();
 
+  // Create a single offscreen canvas to measure text widths efficiently
+  const canvas = typeof document !== 'undefined' ? document.createElement("canvas") : null;
+
+  function measureTextWidth(text) {
+    if (!canvas) return 150;
+    const ctx = canvas.getContext("2d");
+    ctx.font = "13px 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif";
+    return ctx.measureText(text || "").width;
+  }
+
+  let measuredWidth = $derived(measureTextWidth(task.text));
+
   $effect(() => {
     if (inputEl && inputElements) {
       inputElements[task.id] = inputEl;
@@ -43,6 +55,7 @@
   <input 
     type="text" 
     class="task-text {task.checked ? 'completed' : ''}" 
+    style="min-width: {Math.max(150, measuredWidth + 12)}px"
     value={task.text}
     bind:this={inputEl}
     onfocus={() => onFocus(task.id, task.text)}
