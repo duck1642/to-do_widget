@@ -94,8 +94,9 @@ fn set_desktop_parent(window: tauri::Window, enable: bool) -> Result<(), String>
     {
         use windows_sys::Win32::Foundation::HWND;
         use windows_sys::Win32::UI::WindowsAndMessaging::{
-            FindWindowExW, GetShellWindow, SetParent, SetWindowPos, SWP_NOACTIVATE,
-            SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+            FindWindowExW, GetShellWindow, GetWindowLongW, SetParent, SetWindowLongW, SetWindowPos,
+            GWL_STYLE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+            WS_CHILD, WS_POPUP,
         };
 
         let to_wide = |s: &str| -> Vec<u16> {
@@ -154,20 +155,47 @@ fn set_desktop_parent(window: tauri::Window, enable: bool) -> Result<(), String>
             }
 
             unsafe {
+                // Update style: Remove WS_POPUP, Add WS_CHILD
+                let mut style = GetWindowLongW(hwnd, GWL_STYLE);
+                style &= !(WS_POPUP as i32);
+                style |= WS_CHILD as i32;
+                SetWindowLongW(hwnd, GWL_STYLE, style);
+
+                // Re-parent
                 SetParent(hwnd, parent_hwnd);
+
+                // Set position and trigger recalculation with SWP_FRAMECHANGED
                 SetWindowPos(
                     hwnd,
-                    0, // HWND_TOP (0) places it in front of other siblings (like SHELLDLL_DefView)
+                    0, // HWND_TOP
                     0,
                     0,
                     0,
                     0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
                 );
             }
         } else {
             unsafe {
+                // Re-parent to desktop root (0)
                 SetParent(hwnd, 0);
+
+                // Update style: Remove WS_CHILD, Add WS_POPUP
+                let mut style = GetWindowLongW(hwnd, GWL_STYLE);
+                style &= !(WS_CHILD as i32);
+                style |= WS_POPUP as i32;
+                SetWindowLongW(hwnd, GWL_STYLE, style);
+
+                // Set position and trigger recalculation with SWP_FRAMECHANGED
+                SetWindowPos(
+                    hwnd,
+                    0, // HWND_TOP
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
+                );
             }
         }
         Ok(())
