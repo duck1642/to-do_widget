@@ -147,67 +147,168 @@ fn write_config(config: AppConfig) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
+static mut ORIGINAL_WNDPROC: Option<unsafe extern "system" fn(
+    windows_sys::Win32::Foundation::HWND,
+    u32,
+    windows_sys::Win32::Foundation::WPARAM,
+    windows_sys::Win32::Foundation::LPARAM,
+) -> windows_sys::Win32::Foundation::LRESULT> = None;
+
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn subclass_wndproc(
+    hwnd: windows_sys::Win32::Foundation::HWND,
+    msg: u32,
+    wparam: windows_sys::Win32::Foundation::WPARAM,
+    lparam: windows_sys::Win32::Foundation::LPARAM,
+) -> windows_sys::Win32::Foundation::LRESULT {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{CallWindowProcW, WM_GETDLGCODE};
+    const DLGC_WANTALLKEYS: windows_sys::Win32::Foundation::LRESULT = 0x0004;
+
+    if msg == WM_GETDLGCODE {
+        return DLGC_WANTALLKEYS;
+    }
+
+    if let Some(orig) = ORIGINAL_WNDPROC {
+        CallWindowProcW(Some(orig), hwnd, msg, wparam, lparam)
+    } else {
+        0
+    }
+}
+
 #[tauri::command]
 fn set_desktop_parent(window: tauri::Window, enable: bool) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        use windows_sys::Win32::Foundation::HWND;
+        use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
         use windows_sys::Win32::UI::WindowsAndMessaging::{
-            FindWindowW, GetShellWindow, SetParent, SetWindowPos, SWP_NOMOVE, SWP_NOSIZE,
-            SWP_NOACTIVATE, SWP_SHOWWINDOW, SWP_FRAMECHANGED,
+            EnumWindows, FindWindowExW, FindWindowW, GetWindowLongPtrW,
+            SendMessageTimeoutW, SetParent, SetWindowLongPtrW, SetWindowPos,
+            GWL_STYLE, SMTO_NORMAL, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+            SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, WS_CHILD, WS_POPUP,
+            GWLP_WNDPROC,
         };
 
-        let to_wide = |s: &str| -> Vec<u16> {
+        fn wide(s: &str) -> Vec<u16> {
             s.encode_utf16().chain(std::iter::once(0)).collect()
-        };
+        }
 
-        let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as HWND;
+        unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+            let shell = wide("SHELLDLL_DefView");
 
-        if enable {
-            // Find Progman window
-            let mut parent_hwnd = unsafe { FindWindowW(to_wide("Progman").as_ptr(), std::ptr::null()) };
-            if parent_hwnd == 0 {
-                parent_hwnd = unsafe { GetShellWindow() };
+            let def_view = FindWindowExW(
+                hwnd,
+                0,
+                shell.as_ptr(),
+                std::ptr::null(),
+            );
+
+            if def_view != 0 {
+                *(lparam as *mut HWND) = hwnd;
+                return 0;
             }
 
-            if parent_hwnd == 0 {
-                return Err("Could not find desktop shell parent window".to_string());
-            }
+            1
+        }
 
-            unsafe {
-                // Re-parent to Progman directly without changing window styles to WS_CHILD
-                SetParent(hwnd, parent_hwnd);
+        unsafe fn find_desktop_parent() -> HWND {
+            let progman_class = wide("Progman");
+            let progman = FindWindowW(progman_class.as_ptr(), std::ptr::null());
 
-                // Set position and trigger recalculation with SWP_FRAMECHANGED
-                SetWindowPos(
-                    hwnd,
-                    0, // HWND_TOP
+            if progman != 0 {
+                let mut result = 0usize;
+
+                // Ask Explorer to initialize WorkerW windows.
+                SendMessageTimeoutW(
+                    progman,
+                    0x052C,
                     0,
                     0,
-                    0,
-                    0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
+                    SMTO_NORMAL,
+                    1000,
+                    &mut result,
                 );
             }
-        } else {
-            unsafe {
-                // Re-parent to desktop root (0)
-                SetParent(hwnd, 0);
 
-                // Set position and trigger recalculation
+            let mut desktop_parent: HWND = 0;
+            EnumWindows(
+                Some(enum_windows_proc),
+                &mut desktop_parent as *mut HWND as LPARAM,
+            );
+
+            if desktop_parent != 0 {
+                desktop_parent
+            } else {
+                progman
+            }
+        }
+
+        unsafe {
+            let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as HWND;
+
+            if enable {
+                let parent = find_desktop_parent();
+
+                if parent == 0 {
+                    return Err("Could not find desktop parent window".to_string());
+                }
+
+                let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+                let new_style = (style & !WS_POPUP) | WS_CHILD;
+
+                SetWindowLongPtrW(hwnd, GWL_STYLE, new_style as isize);
+                SetParent(hwnd, parent);
+
+                // Subclass the window to intercept WM_GETDLGCODE and handle Tab keys correctly.
+                let original = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, subclass_wndproc as *const () as isize);
+                ORIGINAL_WNDPROC = Some(std::mem::transmute(original));
+
                 SetWindowPos(
                     hwnd,
-                    0, // HWND_TOP
                     0,
                     0,
                     0,
                     0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED,
+                    0,
+                    SWP_NOMOVE
+                        | SWP_NOSIZE
+                        | SWP_NOACTIVATE
+                        | SWP_SHOWWINDOW
+                        | SWP_FRAMECHANGED,
+                );
+            } else {
+                // Restore original window procedure before restoring styles
+                if let Some(orig) = ORIGINAL_WNDPROC {
+                    SetWindowLongPtrW(hwnd, GWLP_WNDPROC, orig as isize);
+                    ORIGINAL_WNDPROC = None;
+                }
+
+                SetParent(hwnd, 0);
+
+                let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+                let new_style = (style & !WS_CHILD) | WS_POPUP;
+
+                SetWindowLongPtrW(hwnd, GWL_STYLE, new_style as isize);
+
+                SetWindowPos(
+                    hwnd,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE
+                        | SWP_NOSIZE
+                        | SWP_NOACTIVATE
+                        | SWP_SHOWWINDOW
+                        | SWP_FRAMECHANGED,
                 );
             }
         }
+
         Ok(())
     }
+
     #[cfg(not(target_os = "windows"))]
     {
         let _ = window;

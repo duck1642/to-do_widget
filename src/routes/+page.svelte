@@ -407,7 +407,8 @@
         await invoke("set_always_on_top", { onTop: true });
       } else if (mode === "desktop") {
         await invoke("set_desktop_parent", { enable: true });
-        await invoke("set_always_on_bottom", { onBottom: true });
+        // Do NOT call set_always_on_bottom here.
+        // Desktop parenting already makes it a desktop-level window.
       }
       
       layerMode = mode;
