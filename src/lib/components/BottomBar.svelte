@@ -1,0 +1,32 @@
+<script>
+  import { Plus, Undo2, Redo2, RotateCw, Trash2 } from "@lucide/svelte";
+
+  let { 
+    redoStackLength, 
+    onAddTask, 
+    onUndo, 
+    onRedo, 
+    onReload, 
+    onClearCompleted 
+  } = $props();
+</script>
+
+<footer class="bottom-bar">
+  <button class="action-btn" onclick={onAddTask} title="Add Task">
+    <Plus size={13} />
+  </button>
+  <div class="footer-right">
+    <button class="action-btn" onclick={onUndo} title="Undo last action">
+      <Undo2 size={13} />
+    </button>
+    <button class="action-btn" onclick={onRedo} disabled={redoStackLength === 0} title="Redo last undone action">
+      <Redo2 size={13} />
+    </button>
+    <button class="action-btn" onclick={onReload} title="Reload file">
+      <RotateCw size={13} />
+    </button>
+    <button class="action-btn" onclick={onClearCompleted} title="Clear completed tasks">
+      <Trash2 size={13} />
+    </button>
+  </div>
+</footer>

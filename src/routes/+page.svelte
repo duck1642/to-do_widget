@@ -4,6 +4,9 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { markdownToTasks, tasksToMarkdown } from "../utils/parser.js";
   import "$lib/styles/app.css";
+  import AppHeader from "$lib/components/AppHeader.svelte";
+  import LayerMenu from "$lib/components/LayerMenu.svelte";
+  import BottomBar from "$lib/components/BottomBar.svelte";
   import { 
     enable as enableAutostart, 
     disable as disableAutostart, 
@@ -485,39 +488,19 @@
 
 <main class="app-container">
   <!-- Title / Drag Header -->
-  <header class="drag-header" class:draggable={dragEnabled} data-tauri-drag-region={dragEnabled ? true : undefined}>
-    <span class="title-text" data-tauri-drag-region={dragEnabled ? true : undefined}>
-      TO-DO {statusMessage ? `[${statusMessage}]` : ""}
-    </span>
-    <div class="header-controls">
-      <button class="icon-btn-header" onclick={() => showModeMenu = !showModeMenu} title="Window Layer Mode">
-        <Layers size={13} />
-        <span class="btn-text">{getModeLabel(layerMode)}</span>
-      </button>
-      <button class="icon-btn-header" onclick={() => editingPath = !editingPath} title="Settings">
-        <Settings size={13} />
-      </button>
-      <button class="icon-btn-header close" onclick={closeApp} title="Close">
-        <X size={13} />
-      </button>
-    </div>
-  </header>
+  <AppHeader 
+    dragEnabled={dragEnabled}
+    layerMode={layerMode}
+    statusMessage={statusMessage}
+    onToggleModeMenu={() => showModeMenu = !showModeMenu}
+    onToggleSettings={() => editingPath = !editingPath}
+    onCloseApp={closeApp}
+  />
 
   <!-- Content Workspace -->
   <div class="content-area" style="position: relative;">
     {#if showModeMenu}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="dropdown-menu">
-        <button class="menu-item {layerMode === 'top' ? 'active' : ''}" onclick={() => changeLayerMode("top")}>
-          Always on Top
-        </button>
-        <button class="menu-item {layerMode === 'normal' ? 'active' : ''}" onclick={() => changeLayerMode("normal")}>
-          Normal Window
-        </button>
-        <button class="menu-item {layerMode === 'desktop' ? 'active' : ''}" onclick={() => changeLayerMode("desktop")}>
-          Pin to Desktop
-        </button>
-      </div>
+      <LayerMenu layerMode={layerMode} onSelectMode={changeLayerMode} />
     {/if}
     {#if editingPath}
       <div class="settings-panel">
@@ -649,25 +632,14 @@
   </div>
 
   <!-- Bottom Action Bar -->
-  <footer class="bottom-bar">
-    <button class="action-btn" onclick={() => addTask(-1, 0)} title="Add Task">
-      <Plus size={13} />
-    </button>
-    <div class="footer-right">
-      <button class="action-btn" onclick={undo} title="Undo last action">
-        <Undo2 size={13} />
-      </button>
-      <button class="action-btn" onclick={redo} disabled={redoStack.length === 0} title="Redo last undone action">
-        <Redo2 size={13} />
-      </button>
-      <button class="action-btn" onclick={loadFile} title="Reload file">
-        <RotateCw size={13} />
-      </button>
-      <button class="action-btn" onclick={clearCompleted} title="Clear completed tasks">
-        <Trash2 size={13} />
-      </button>
-    </div>
-  </footer>
+  <BottomBar 
+    redoStackLength={redoStack.length}
+    onAddTask={() => addTask(-1, 0)}
+    onUndo={undo}
+    onRedo={redo}
+    onReload={loadFile}
+    onClearCompleted={clearCompleted}
+  />
 </main>
 
 
