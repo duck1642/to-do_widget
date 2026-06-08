@@ -25,7 +25,7 @@
     <button class="action-btn" onclick={onReload} title="Reload file">
       <RotateCw size={13} />
     </button>
-    <button class="action-btn" onclick={onClearCompleted} title="Clear completed tasks">
+    <button class="action-btn del" onclick={onClearCompleted} title="Clear completed tasks">
       <Trash2 size={13} />
     </button>
   </div>

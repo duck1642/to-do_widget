@@ -323,6 +323,12 @@ input, button, textarea, select {
   border-color: var(--text-muted);
 }
 
+.action-btn.del:hover:not(:disabled) {
+  color: #ff5555;
+  background-color: rgba(255, 85, 85, 0.1);
+  border-color: rgba(255, 85, 85, 0.3);
+}
+
 .action-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
