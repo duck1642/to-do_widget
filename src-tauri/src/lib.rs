@@ -345,6 +345,18 @@ pub fn run() {
                 let _tray = TrayIconBuilder::new()
                     .icon(icon.clone())
                     .menu(&menu)
+                    .show_menu_on_left_click(false)
+                    .on_tray_icon_event(|tray, event| {
+                        if let tauri::tray::TrayIconEvent::Click { button, button_state, .. } = event {
+                            if button == tauri::tray::MouseButton::Left && button_state == tauri::tray::MouseButtonState::Up {
+                                let app = tray.app_handle();
+                                if let Some(window) = app.get_webview_window("main") {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                        }
+                    })
                     .on_menu_event(|app: &tauri::AppHandle, event: tauri::menu::MenuEvent| match event.id.as_ref() {
                         "quit" => {
                             app.exit(0);
