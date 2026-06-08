@@ -2,7 +2,10 @@
   import { onMount, tick } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { markdownToTasks, tasksToMarkdown } from "../utils/parser.js";
+  import { markdownToTasks, tasksToMarkdown } from "$lib/utils/parser.js";
+  import { getLogPath } from "$lib/utils/paths.js";
+  import { createTask } from "$lib/utils/tasks.js";
+  import { applyAction } from "$lib/utils/actions.js";
   import "$lib/styles/app.css";
   import AppHeader from "$lib/components/AppHeader.svelte";
   import LayerMenu from "$lib/components/LayerMenu.svelte";
@@ -14,19 +17,6 @@
     disable as disableAutostart, 
     isEnabled as isAutostartEnabled 
   } from "@tauri-apps/plugin-autostart";
-  import { 
-    Plus, 
-    Undo2, 
-    Redo2, 
-    RotateCw, 
-    Trash2, 
-    ChevronUp, 
-    ChevronDown, 
-    Settings, 
-    Layers, 
-    X,
-    Check
-  } from "@lucide/svelte";
 
   // State variables (Svelte 5 Runes)
   let filePath = $state("");
@@ -55,12 +45,6 @@
         statusMessage = "";
       }
     }, 2000);
-  }
-
-  // Get log file path corresponding to the todo file path
-  function getLogPath(path) {
-    const replaced = path.replace(/\.[^\\/]+$/, ".jsonl");
-    return replaced === path ? `${path}.jsonl` : replaced;
   }
 
   // Load markdown tasks from file
@@ -236,14 +220,8 @@
   }
 
   async function addTask(index, indent = 0) {
-    const newId = Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
-    const newTask = {
-      id: newId,
-      isTask: true,
-      checked: false,
-      text: "",
-      indent: indent
-    };
+    const newTask = createTask(indent);
+    const newId = newTask.id;
     
     const insertIndex = index === -1 ? tasks.length : index + 1;
     logAction({ type: "add", index: insertIndex, task: newTask });
@@ -272,65 +250,12 @@
     saveFile();
   }
 
-  // Core action application function (handles both applying an action and its inverse)
-  function applyAction(action, isInverse) {
-    if (action.type === "delete") {
-      if (isInverse) {
-        tasks.splice(action.index, 0, action.task);
-      } else {
-        const idx = tasks.findIndex(t => t.id === action.task.id);
-        if (idx !== -1) tasks.splice(idx, 1);
-      }
-    } else if (action.type === "add") {
-      if (isInverse) {
-        const idx = tasks.findIndex(t => t.id === action.task.id);
-        if (idx !== -1) tasks.splice(idx, 1);
-      } else {
-        tasks.splice(action.index, 0, action.task);
-      }
-    } else if (action.type === "toggle") {
-      const task = tasks.find(t => t.id === action.id);
-      if (task) {
-        task.checked = isInverse ? action.oldChecked : action.newChecked;
-      }
-    } else if (action.type === "edit") {
-      const task = tasks.find(t => t.id === action.id);
-      if (task) {
-        task.text = isInverse ? action.oldText : action.newText;
-      }
-    } else if (action.type === "move") {
-      const from = isInverse ? action.toIndex : action.fromIndex;
-      const to = isInverse ? action.fromIndex : action.toIndex;
-      if (from >= 0 && from < tasks.length && to >= 0 && to < tasks.length) {
-        const temp = tasks[from];
-        tasks[from] = tasks[to];
-        tasks[to] = temp;
-      }
-    } else if (action.type === "indent") {
-      const task = tasks.find(t => t.id === action.id);
-      if (task) {
-        task.indent = isInverse ? action.oldIndent : action.newIndent;
-      }
-    } else if (action.type === "clear_completed") {
-      if (isInverse) {
-        // Restore in ascending order of original index
-        const sorted = [...action.deletedTasks].sort((a, b) => a.index - b.index);
-        for (const entry of sorted) {
-          tasks.splice(entry.index, 0, entry.task);
-        }
-      } else {
-        const idsToDelete = new Set(action.deletedTasks.map(x => x.task.id));
-        tasks = tasks.filter(t => !idsToDelete.has(t.id));
-      }
-    }
-  }
-
   async function undo() {
     try {
       const poppedLine = await invoke("pop_deleted_task", { path: logPath });
       const action = JSON.parse(poppedLine);
       
-      applyAction(action, true);
+      tasks = applyAction(tasks, action, true);
       redoStack.push(action);
       
       saveFile();
@@ -348,7 +273,7 @@
     if (redoStack.length === 0) return;
     
     const action = redoStack.pop();
-    applyAction(action, false);
+    tasks = applyAction(tasks, action, false);
     
     try {
       await invoke("log_deleted_task", { path: logPath, entryJson: JSON.stringify(action) });
