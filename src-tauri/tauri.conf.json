@@ -20,7 +20,8 @@
         "decorations": false,
         "alwaysOnBottom": false,
         "minWidth": 260,
-        "minHeight": 300
+        "minHeight": 300,
+        "skipTaskbar": true
       }
     ],
     "security": {

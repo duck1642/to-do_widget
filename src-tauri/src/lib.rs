@@ -1,5 +1,6 @@
 use std::fs;
 use std::time::UNIX_EPOCH;
+use tauri::Manager;
 
 #[tauri::command]
 fn read_todo(path: String) -> Result<String, String> {
@@ -87,10 +88,153 @@ fn pop_deleted_task(path: String) -> Result<String, String> {
     Ok(last_line)
 }
 
+#[tauri::command]
+fn set_desktop_parent(window: tauri::Window, enable: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::Foundation::HWND;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            FindWindowExW, GetShellWindow, SetParent, SetWindowPos, HWND_BOTTOM, SWP_NOACTIVATE,
+            SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+        };
+
+        let to_wide = |s: &str| -> Vec<u16> {
+            s.encode_utf16().chain(std::iter::once(0)).collect()
+        };
+
+        let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as HWND;
+
+        if enable {
+            let shell_w = unsafe { GetShellWindow() };
+            if shell_w == 0 {
+                return Err("Default shell window not found".to_string());
+            }
+
+            let has_def_view_direct = unsafe {
+                FindWindowExW(
+                    shell_w,
+                    0,
+                    to_wide("SHELLDLL_DefView").as_ptr(),
+                    std::ptr::null(),
+                )
+            };
+
+            let mut parent_hwnd = 0;
+
+            if has_def_view_direct != 0 {
+                parent_hwnd = shell_w;
+            } else {
+                let mut worker_w = 0;
+                unsafe {
+                    while {
+                        worker_w = FindWindowExW(
+                            0,
+                            worker_w,
+                            to_wide("WorkerW").as_ptr(),
+                            std::ptr::null(),
+                        );
+                        worker_w != 0
+                    } {
+                        let def_view = FindWindowExW(
+                            worker_w,
+                            0,
+                            to_wide("SHELLDLL_DefView").as_ptr(),
+                            std::ptr::null(),
+                        );
+                        if def_view != 0 {
+                            parent_hwnd = worker_w;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if parent_hwnd == 0 {
+                return Err("Could not find desktop shell parent window".to_string());
+            }
+
+            unsafe {
+                SetParent(hwnd, parent_hwnd);
+                SetWindowPos(
+                    hwnd,
+                    HWND_BOTTOM,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                );
+            }
+        } else {
+            unsafe {
+                SetParent(hwnd, 0);
+            }
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = window;
+        let _ = enable;
+        Ok(())
+    }
+}
+
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--silent"]),
+        ))
+        .setup(|app| {
+            // Handle --silent flag to start hidden
+            let args: Vec<String> = std::env::args().collect();
+            if args.contains(&"--silent".to_string()) {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+            }
+
+            // Setup System Tray
+            use tauri::menu::{Menu, MenuItem};
+            use tauri::tray::TrayIconBuilder;
+
+            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>).map_err(|e| e.to_string())?;
+            let show = MenuItem::with_id(app, "show", "Show", true, None::<&str>).map_err(|e| e.to_string())?;
+            let menu = Menu::with_items(app, &[&show, &quit]).map_err(|e| e.to_string())?;
+
+            if let Some(icon) = app.default_window_icon() {
+                let _tray = TrayIconBuilder::new()
+                    .icon(icon.clone())
+                    .menu(&menu)
+                    .on_menu_event(|app: &tauri::AppHandle, event: tauri::menu::MenuEvent| match event.id.as_ref() {
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        _ => {}
+                    })
+                    .build(app)
+                    .map_err(|e: tauri::Error| e.to_string())?;
+            }
+
+            Ok(())
+        })
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+            _ => {}
+        })
         .invoke_handler(tauri::generate_handler![
             read_todo,
             write_todo,
@@ -99,8 +243,10 @@ pub fn run() {
             set_always_on_top,
             set_always_on_bottom,
             log_deleted_task,
-            pop_deleted_task
+            pop_deleted_task,
+            set_desktop_parent
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+

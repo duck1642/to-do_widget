@@ -4,6 +4,11 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { markdownToTasks, tasksToMarkdown } from "../utils/parser.js";
   import { 
+    enable as enableAutostart, 
+    disable as disableAutostart, 
+    isEnabled as isAutostartEnabled 
+  } from "@tauri-apps/plugin-autostart";
+  import { 
     Plus, 
     Undo2, 
     Redo2, 
@@ -31,6 +36,7 @@
   let redoStack = $state([]);
   let originalTexts = {};
   let dragEnabled = $state(true);
+  let autostartEnabled = $state(false);
 
   // Keep a reference to inputs to set focus programmatically
   let inputElements = {};
@@ -84,6 +90,11 @@
   onMount(() => {
     loadFile();
     
+    // Check if autostart is enabled
+    isAutostartEnabled().then(val => {
+      autostartEnabled = val;
+    }).catch(() => {});
+
     // Load and apply saved window layering mode
     const savedMode = localStorage.getItem("todo-layer-mode");
     if (savedMode) {
@@ -112,6 +123,7 @@
     
     return () => clearInterval(interval);
   });
+
 
   // Action logging helper
   async function logAction(action) {
@@ -370,6 +382,11 @@
 
   async function changeLayerMode(mode) {
     try {
+      // If leaving desktop mode, unparent first
+      if (layerMode === "desktop" && mode !== "desktop") {
+        await invoke("set_desktop_parent", { enable: false });
+      }
+
       // Reset both flags first
       await invoke("set_always_on_top", { onTop: false });
       await invoke("set_always_on_bottom", { onBottom: false });
@@ -377,6 +394,7 @@
       if (mode === "top") {
         await invoke("set_always_on_top", { onTop: true });
       } else if (mode === "desktop") {
+        await invoke("set_desktop_parent", { enable: true });
         await invoke("set_always_on_bottom", { onBottom: true });
       }
       
@@ -400,6 +418,23 @@
     localStorage.setItem("todo-drag-enabled", dragEnabled.toString());
     showStatus(dragEnabled ? "Drag On" : "Drag Off");
   }
+
+  async function toggleAutostart() {
+    try {
+      if (autostartEnabled) {
+        await disableAutostart();
+        autostartEnabled = false;
+        showStatus("Autostart Off");
+      } else {
+        await enableAutostart();
+        autostartEnabled = true;
+        showStatus("Autostart On");
+      }
+    } catch (err) {
+      showStatus("Err Startup: " + err);
+    }
+  }
+
 
 </script>
 
@@ -485,6 +520,24 @@
           </button>
           <span class="settings-label" style="user-select: none; cursor: pointer;">
             Window Dragging
+          </span>
+        </div>
+
+        <!-- Autostart Toggle -->
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="settings-toggle-row" style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin-top: 4px;" onclick={toggleAutostart}>
+          <button 
+            type="button"
+            class="custom-check-btn {autostartEnabled ? 'checked' : ''}" 
+            title="Toggle autostart on boot"
+          >
+            {#if autostartEnabled}
+              <Check size={10} strokeWidth={4} />
+            {/if}
+          </button>
+          <span class="settings-label" style="user-select: none; cursor: pointer;">
+            Start on Boot
           </span>
         </div>
 
