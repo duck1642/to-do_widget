@@ -424,7 +424,7 @@
 
 </script>
 
-<main class="app-container">
+<main class="app-container" class:desktop-mode={layerMode === 'desktop'}>
   <!-- Title / Drag Header -->
   <AppHeader 
     dragEnabled={dragEnabled}
