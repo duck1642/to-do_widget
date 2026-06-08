@@ -9,7 +9,7 @@
 }
 
 /* Reset and base styles */
-:global(html), :global(body) {
+html, body {
   margin: 0;
   padding: 0;
   width: 100%;
@@ -18,14 +18,14 @@
   background-color: transparent !important;
 }
 
-:global(body) {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
   color: var(--text-color);
   user-select: none;
   position: relative;
 }
 
-:global(input), :global(button), :global(textarea), :global(select) {
+input, button, textarea, select {
   font-family: inherit;
 }
 
@@ -63,8 +63,8 @@
 
 .title-text {
   font-size: 11px;
-  font-weight: bold;
-  letter-spacing: 1px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
   color: var(--text-muted);
 }
 
