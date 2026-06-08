@@ -180,9 +180,9 @@ fn set_desktop_parent(window: tauri::Window, enable: bool) -> Result<(), String>
         use windows_sys::Win32::UI::WindowsAndMessaging::{
             EnumWindows, FindWindowExW, FindWindowW, GetWindowLongPtrW,
             SendMessageTimeoutW, SetParent, SetWindowLongPtrW, SetWindowPos,
-            GWL_STYLE, SMTO_NORMAL, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+            GWL_STYLE, GWL_EXSTYLE, SMTO_NORMAL, SWP_FRAMECHANGED, SWP_NOACTIVATE,
             SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, WS_CHILD, WS_POPUP,
-            GWLP_WNDPROC,
+            WS_EX_LAYERED, GWLP_WNDPROC,
         };
 
         fn wide(s: &str) -> Vec<u16> {
@@ -253,7 +253,11 @@ fn set_desktop_parent(window: tauri::Window, enable: bool) -> Result<(), String>
                     let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
                     let new_style = (style & !WS_POPUP) | WS_CHILD;
 
+                    let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
+                    let new_ex_style = ex_style | WS_EX_LAYERED;
+
                     SetWindowLongPtrW(hwnd, GWL_STYLE, new_style as isize);
+                    SetWindowLongPtrW(hwnd, GWL_EXSTYLE, new_ex_style as isize);
                     SetParent(hwnd, parent);
 
                     // Subclass the window to intercept WM_GETDLGCODE and handle Tab keys correctly.
@@ -289,7 +293,11 @@ fn set_desktop_parent(window: tauri::Window, enable: bool) -> Result<(), String>
                 let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
                 let new_style = (style & !WS_CHILD) | WS_POPUP;
 
+                let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
+                let new_ex_style = ex_style & !WS_EX_LAYERED;
+
                 SetWindowLongPtrW(hwnd, GWL_STYLE, new_style as isize);
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, new_ex_style as isize);
 
                 SetWindowPos(
                     hwnd,
