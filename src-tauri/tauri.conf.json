@@ -16,7 +16,7 @@
         "title": "Desktop To-Do",
         "width": 360,
         "height": 550,
-        "transparent": false,
+        "transparent": true,
         "decorations": false,
         "minWidth": 260,
         "minHeight": 300,
