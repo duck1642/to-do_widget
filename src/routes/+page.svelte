@@ -7,6 +7,7 @@
   import AppHeader from "$lib/components/AppHeader.svelte";
   import LayerMenu from "$lib/components/LayerMenu.svelte";
   import BottomBar from "$lib/components/BottomBar.svelte";
+  import TaskList from "$lib/components/TaskList.svelte";
   import { 
     enable as enableAutostart, 
     disable as disableAutostart, 
@@ -555,79 +556,30 @@
         </div>
       </div>
     {:else}
-      <div class="task-list">
-        {#each tasks as task, index (task.id)}
-          {#if task.isTask}
-            <div 
-              class="task-row" 
-              style="padding-left: {task.indent * 16}px"
-            >
-              <button 
-                type="button"
-                class="custom-check-btn {task.checked ? 'checked' : ''}" 
-                onclick={() => toggleTask(task.id)}
-                title={task.checked ? "Mark active" : "Mark completed"}
-              >
-                {#if task.checked}
-                  <Check size={10} strokeWidth={4} />
-                {/if}
-              </button>
-              <input 
-                type="text" 
-                class="task-text {task.checked ? 'completed' : ''}" 
-                value={task.text}
-                bind:this={inputElements[task.id]}
-                onfocus={() => {
-                  focusedTaskId = task.id;
-                  originalTexts[task.id] = task.text;
-                }}
-                onblur={() => {
-                  if (focusedTaskId === task.id) {
-                    focusedTaskId = "";
-                  }
-                  const oldText = originalTexts[task.id];
-                  if (oldText !== undefined && oldText !== task.text) {
-                    logAction({ type: "edit", id: task.id, oldText, newText: task.text });
-                  }
-                  delete originalTexts[task.id];
-                }}
-                oninput={(e) => updateText(task.id, e.target.value)}
-                onkeydown={(e) => handleKeyDown(e, index, task)}
-                placeholder="New Task..."
-              />
-              <div class="row-actions">
-                <button class="row-btn" onclick={() => moveTaskUp(index)} title="Move Up">
-                  <ChevronUp size={13} />
-                </button>
-                <button class="row-btn" onclick={() => moveTaskDown(index)} title="Move Down">
-                  <ChevronDown size={13} />
-                </button>
-                <button class="row-btn del" onclick={() => deleteTask(index)} title="Delete">
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            </div>
-          {:else}
-            <!-- Render non-task text/headings as plain read-only line -->
-            {#if task.raw.trim().length > 0}
-              <div class="raw-row">
-                <span class="raw-text">{task.raw}</span>
-                <div class="row-actions">
-                  <button class="row-btn del" onclick={() => deleteTask(index)} title="Delete">
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              </div>
-            {/if}
-          {/if}
-        {/each}
-
-        {#if tasks.length === 0}
-          <div class="empty-state">
-            No tasks. Press [+] below to start.
-          </div>
-        {/if}
-      </div>
+      <TaskList 
+        tasks={tasks}
+        inputElements={inputElements}
+        onToggleTask={toggleTask}
+        onUpdateText={updateText}
+        onMoveTaskUp={moveTaskUp}
+        onMoveTaskDown={moveTaskDown}
+        onDeleteTask={deleteTask}
+        onFocus={(id, text) => {
+          focusedTaskId = id;
+          originalTexts[id] = text;
+        }}
+        onBlur={(id, text) => {
+          if (focusedTaskId === id) {
+            focusedTaskId = "";
+          }
+          const oldText = originalTexts[id];
+          if (oldText !== undefined && oldText !== text) {
+            logAction({ type: "edit", id, oldText, newText: text });
+          }
+          delete originalTexts[id];
+        }}
+        onKeyDown={handleKeyDown}
+      />
     {/if}
   </div>
 
